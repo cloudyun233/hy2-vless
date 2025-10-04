@@ -4,13 +4,16 @@ set -euo pipefail
 # 精简版安装脚本：VLESS+XTLS+REALITY (Xray) + Hysteria2
 # 官方安装脚本和对应目录
 # hy：/etc/hysteria/
+# 安装或升级到最新版本。
 # bash <(curl -fsSL https://get.hy2.sh/)
+# 移除 Hysteria 及相关服务
+# bash <(curl -fsSL https://get.hy2.sh/) --remove
 
 # xray：
 # 安装目录/usr/local/share/xray/
 # 配置文件目录/usr/local/etc/xray/
 # 安装并升级 Xray-core 和地理数据，默认使用 User=nobody，但不会覆盖已有服务文件中的 User 设置
-# bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+# bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 # 移除 Xray，包括 json 配置文件和日志
 # bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove --purge
 
@@ -43,6 +46,116 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
+# 检查必要的环境和工具
+check_environment() {
+  info "检查系统环境和必要工具..."
+  
+  # 检查 bash
+  if ! command -v bash >/dev/null 2>&1; then
+    err "未找到 bash，请先安装 bash。"
+    exit 1
+  fi
+  
+  # 检查是否使用 busybox 提供的 bash
+  if bash --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
+    err "检测到 bash 由 busybox 提供，请使用完整的 GNU bash。"
+    exit 1
+  fi
+  
+  # 检查 grep
+  if ! command -v grep >/dev/null 2>&1; then
+    err "未找到 grep，请先安装 grep。"
+    exit 1
+  fi
+  
+  # 检查是否使用 busybox 提供的 grep
+  if grep --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
+    err "检测到 grep 由 busybox 提供，请使用完整的 GNU grep。"
+    exit 1
+  fi
+  
+  # 检查 curl
+  if ! command -v curl >/dev/null 2>&1; then
+    err "未找到 curl，请先安装 curl。"
+    exit 1
+  fi
+  
+  # 检查是否使用 busybox 提供的 curl
+  if curl --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
+    err "检测到 curl 由 busybox 提供，请使用完整的 GNU curl。"
+    exit 1
+  fi
+  
+  # 检查 GNU Coreutils 工具集中的基本命令
+  local coreutils_commands=("cat" "cp" "mv" "rm" "mkdir" "chmod" "chown" "ls" "sed" "awk")
+  local missing_commands=()
+  local busybox_commands=()
+  
+  for cmd in "${coreutils_commands[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing_commands+=("$cmd")
+    elif "$cmd" --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
+      busybox_commands+=("$cmd")
+    fi
+  done
+  
+  if [ ${#missing_commands[@]} -gt 0 ]; then
+    err "缺少以下 GNU Coreutils 工具: ${missing_commands[*]}"
+    err "请先安装 GNU Coreutils 工具集。"
+    exit 1
+  fi
+  
+  if [ ${#busybox_commands[@]} -gt 0 ]; then
+    err "以下工具由 busybox 提供，而非 GNU Coreutils: ${busybox_commands[*]}"
+    err "请使用完整的 GNU Coreutils 工具集替代 busybox 版本。"
+    exit 1
+  fi
+  
+  # 检查 useradd 命令
+  if ! command -v useradd >/dev/null 2>&1; then
+    warn "未找到 useradd，尝试安装..."
+    case "$PM" in
+      apt)
+        apt-get update -y
+        apt-get install -y shadow || warn "无法安装 shadow 包，请手动安装"
+        ;;
+      yum|dnf)
+        yum install -y shadow-utils || dnf install -y shadow-utils || warn "无法安装 shadow-utils 包，请手动安装"
+        ;;
+      apk)
+        apk add --no-cache shadow || warn "无法安装 shadow 包，请手动安装"
+        ;;
+      *)
+        warn "无法识别包管理器，请手动安装包含 useradd 的包"
+        ;;
+    esac
+    
+    # 再次检查 useradd 是否安装成功
+    if ! command -v useradd >/dev/null 2>&1; then
+      warn "useradd 安装失败，某些功能可能受限"
+    else
+      info "useradd 已成功安装"
+    fi
+  else
+    info "useradd 已安装"
+  fi
+  
+  info "环境检查通过，所有必要工具已安装且不是通过 busybox 提供。"
+}
+
+# 检测包管理器/发行版
+PM=""
+if command -v apt-get >/dev/null 2>&1; then PM=apt
+elif command -v dnf >/dev/null 2>&1; then PM=dnf
+elif command -v yum >/dev/null 2>&1; then PM=yum
+elif command -v apk >/dev/null 2>&1; then PM=apk
+fi
+
+info "检测到包管理器: ${PM:-(unknown)}"
+
+# 执行环境检查
+check_environment
+
 # 默认值
 XRAY_PORT_TCP=443
 HY2_PORT_UDP=443
@@ -68,25 +181,30 @@ gen_uuid() {
 
 rand_hex(){ openssl rand -hex "${1:-16}"; }
 
-# 检测包管理器/发行版
-PM=""
-if command -v apt-get >/dev/null 2>&1; then PM=apt
-elif command -v dnf >/dev/null 2>&1; then PM=dnf
-elif command -v yum >/dev/null 2>&1; then PM=yum
-elif command -v apk >/dev/null 2>&1; then PM=apk
-fi
-
-info "检测到包管理器: ${PM:-(unknown)}"
-
-# 确保基本工具存在(curl/wget/openssl)
+# 确保基本工具存在(curl/wget/openssl/GNU Coreutils)
 ensure_pkgs(){
+  info "确保基本工具已安装..."
   case "$PM" in
-    apt) apt-get update -y && apt-get install -y curl wget openssl || true;;
-    yum) yum install -y curl wget openssl || true;;
-    dnf) dnf install -y curl wget openssl || true;;
-    apk) apk add --no-cache curl wget openssl || true;;
-    *) warn "无法识别包管理器，请确保 curl/wget/openssl 可用。";;
+    apt)
+      apt-get update -y
+      apt-get install -y curl wget openssl coreutils bash grep passwd || true
+      ;;
+    yum)
+      yum install -y curl wget openssl coreutils bash grep shadow-utils || true
+      ;;
+    dnf)
+      dnf install -y curl wget openssl coreutils bash grep shadow-utils || true
+      ;;
+    apk)
+      apk add --no-cache curl wget openssl bash grep shadow || true
+      # Alpine 默认使用 busybox，需要额外安装 GNU 版本
+      apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community findutils || true
+      ;;
+    *)
+      warn "无法识别包管理器，请确保 curl/wget/openssl/GNU Coreutils/bash/grep/useradd 可用。"
+      ;;
   esac
+  info "基本工具检查完成。"
 }
 
 ensure_pkgs
@@ -102,23 +220,88 @@ fi
 
 # 菜单
 cat <<'MENU'
-请选择要安装的协议（输入数字）:
+请选择要执行的操作（输入数字）:
   1) 仅安装 VLESS + XTLS + REALITY (Xray)
   2) 仅安装 Hysteria2
-  3) 两者都安装
+  3) 仅删除 Xray
+  4) 仅删除 Hysteria2
 MENU
-read -rp "选择 (1/2/3) [1]: " CHOICE
+read -rp "选择 (1/2/3/4) [1]: " CHOICE
 CHOICE=${CHOICE:-1}
 INSTALL_XRAY=false
 INSTALL_HY2=false
+REMOVE_XRAY=false
+REMOVE_HY2=false
 [[ "$CHOICE" == "1" ]] && INSTALL_XRAY=true
 [[ "$CHOICE" == "2" ]] && INSTALL_HY2=true
-[[ "$CHOICE" == "3" ]] && INSTALL_XRAY=true && INSTALL_HY2=true
+[[ "$CHOICE" == "3" ]] && REMOVE_XRAY=true
+[[ "$CHOICE" == "4" ]] && REMOVE_HY2=true
+
+###############################################################################
+# 删除函数
+###############################################################################
+# 删除 Xray
+remove_xray() {
+  info "开始删除 Xray..."
+  
+  if [[ "$PM" == "apk" ]]; then
+    info "检测到 Alpine 系统，使用 Alpine 专用删除流程..."
+    rc-service xray stop 2>/dev/null || true
+    rc-update del xray 2>/dev/null || true
+    rm -rf /usr/local/bin/xray /usr/local/share/xray /usr/local/etc/xray /var/log/xray /etc/init.d/xray 2>/dev/null || true
+    apk del unzip 2>/dev/null || true
+    info "Alpine 系统上的 Xray 已删除"
+  else
+    info "使用官方删除脚本删除 Xray..."
+    if bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove --purge; then
+      info "Xray 官方删除脚本已执行"
+    else
+      err "执行 Xray 官方删除脚本失败，请手动检查"
+    fi
+  fi
+}
+
+# 删除 Hysteria2
+remove_hy2() {
+  info "开始删除 Hysteria2..."
+  
+  if [[ "$PM" == "apk" ]]; then
+    info "检测到 Alpine 系统，使用 Alpine 专用删除流程..."
+    rc-service hysteria stop 2>/dev/null || true
+    rc-update del hysteria 2>/dev/null || true
+    rm -f /etc/init.d/hysteria 2>/dev/null || true
+    rm -f "$HY_BIN_PATH" 2>/dev/null || true
+    rm -rf "$HY_CONF_DIR" 2>/dev/null || true
+    info "Alpine 系统上的 Hysteria2 已删除"
+  else
+    info "使用官方删除脚本删除 Hysteria2..."
+    if bash <(curl -fsSL https://get.hy2.sh/) --remove; then
+      info "Hysteria2 官方删除脚本已执行"
+    else
+      err "执行 Hysteria2 官方删除脚本失败，请手动检查"
+    fi
+  fi
+}
+
+# 执行删除操作
+if [[ "$REMOVE_XRAY" == "true" ]]; then
+  remove_xray
+fi
+
+if [[ "$REMOVE_HY2" == "true" ]]; then
+  remove_hy2
+fi
+
+# 如果只是删除操作，完成后退出
+if [[ "$REMOVE_XRAY" == "true" || "$REMOVE_HY2" == "true" ]] && [[ "$INSTALL_XRAY" != "true" && "$INSTALL_HY2" != "true" ]]; then
+  info "删除操作完成"
+  exit 0
+fi
 
 ###############################################################################
 # XRAY 安装与配置 (VLESS + REALITY)
 ###############################################################################
-if $INSTALL_XRAY; then
+if [[ "$INSTALL_XRAY" == "true" ]]; then
   info "开始安装 Xray (VLESS+REALITY) — 使用官方推荐流程（优先尝试官方安装脚本）。"
 
   if [[ "$PM" == "apk" ]]; then
@@ -131,10 +314,12 @@ if $INSTALL_XRAY; then
     fi
   else
     # 尝试主安装程序（适用于许多发行版）
-    if bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null 2>&1; then
+    info "正在执行 Xray 官方安装脚本..."
+    if bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install; then
       info "Xray 官方安装脚本已执行（或已安装）。"
     else
-      warn "执行 Xray 官方安装脚本失败或被阻塞，脚本将生成示例配置供手动部署。"
+      err "执行 Xray 官方安装脚本失败，可能是网络问题或连接被重置。请检查网络连接或手动安装 Xray。"
+      warn "脚本将生成示例配置供手动部署，但 Xray 可能未正确安装。"
     fi
   fi
 
@@ -226,7 +411,7 @@ fi
 ###############################################################################
 # HYSTERIA2 安装与配置
 ###############################################################################
-if $INSTALL_HY2; then
+if [[ "$INSTALL_HY2" == "true" ]]; then
   info "开始安装 Hysteria2（优先尝试官方安装器，若为 Alpine 使用轻量二进制+openrc 流程）。"
 
   mkdir -p "$HY_CONF_DIR"
@@ -262,13 +447,11 @@ if $INSTALL_HY2; then
     read -rp "ACME 邮箱（可留空）: " HY_EMAIL
     # 对于 Alpine，acme 可由 get.hy2.sh 处理或使用 acme.sh
   else
-    info "生成自签名证书到 /etc/hysteria/selfsigned.crt & .key"
+    info "生成自签名证书到 /etc/hysteria/server.crt & server.key"
     mkdir -p "$HY_CONF_DIR"
-    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -days 36500 \
-      -subj "/CN=www.shinnku.com" \
-      -keyout "$HY_CONF_DIR/selfsigned.key" -out "$HY_CONF_DIR/selfsigned.crt"
-    HY_TLS_CERT="$HY_CONF_DIR/selfsigned.crt"
-    HY_TLS_KEY="$HY_CONF_DIR/selfsigned.key"
+    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -keyout /etc/hysteria/server.key -out /etc/hysteria/server.crt -subj "/CN=www.shinnku.com" -days 36500 && sudo chown hysteria /etc/hysteria/server.key && sudo chown hysteria /etc/hysteria/server.crt
+    HY_TLS_CERT="/etc/hysteria/server.crt"
+    HY_TLS_KEY="/etc/hysteria/server.key"
     HY_TLS_MODE="file"
   fi
 
@@ -323,6 +506,9 @@ masquerade:
     rewriteHost: true
 YAML
 
+  # 设置配置文件最宽松权限
+  chmod 777 "$HY_CONF_PATH"
+
   # 根据发行版安装二进制或调用官方安装程序
   if [[ "$PM" == "apk" ]]; then
     info "检测到 Alpine — 使用二进制下载 + openrc 注册 hysteria（参考 Alpine 专用流程）。"
@@ -347,7 +533,7 @@ YAML
     
     # 尝试下载最新的 hysteria 二进制
     if wget -q -O "$HY_BIN_PATH" "https://download.hysteria.network/app/latest/${HY_ARCH}" --no-check-certificate; then
-      chmod +x "$HY_BIN_PATH"
+      chmod 777 "$HY_BIN_PATH"
       info "hysteria 二进制已下载到 ${HY_BIN_PATH}"
 
       # 创建 openrc 服务文件
@@ -372,17 +558,18 @@ EOF
     fi
   else
     # 为非 Alpine 系统尝试官方安装程序
-    if bash <(curl -fsSL https://get.hy2.sh/) >/dev/null 2>&1; then
+    info "正在执行 Hysteria2 官方安装脚本..."
+    if bash <(curl -fsSL https://get.hy2.sh/); then
       info "调用 Hysteria 官方安装器完成（或已安装）。"
     else
-      warn "调用 Hysteria 官方安装器失败，已生成配置供手动部署。"
+      err "调用 Hysteria 官方安装器失败，已生成配置供手动部署。"
     fi
 
     # 如果可用，尝试启用 systemd
     if command -v systemctl >/dev/null 2>&1; then
-      if systemctl list-unit-files | grep -qi hysteria; then
+      if systemctl list-unit-files | grep -qi hysteria-server; then
         systemctl daemon-reload || true
-        systemctl enable --now hysteria || systemctl restart hysteria || warn "无法自动启动/重启 hysteria，请手动检查 systemctl status hysteria"
+        systemctl enable --now hysteria-server.service || systemctl restart hysteria-server.service || warn "无法自动启动/重启 hysteria-server，请手动检查 systemctl status hysteria-server.service"
       fi
     fi
   fi
@@ -467,100 +654,127 @@ echo
 info "================= 配置完成 — 以下为生成的配置文件/要点 ================="
 
 after_exit(){
-  if $INSTALL_XRAY; then
-    echo "----- XRAY: $XRAY_CONF_PATH -----"
-    if [[ -f "$XRAY_CONF_PATH" ]]; then
-      sed -n '1,200p' "$XRAY_CONF_PATH" || true
+  # 只在安装操作完成后显示配置信息
+  if [[ "$INSTALL_XRAY" == "true" || "$INSTALL_HY2" == "true" ]]; then
+    if [[ "$INSTALL_XRAY" == "true" ]]; then
+      echo "----- XRAY: $XRAY_CONF_PATH -----"
+      if [[ -f "$XRAY_CONF_PATH" ]]; then
+        sed -n '1,200p' "$XRAY_CONF_PATH" || true
+      else
+        echo "(未找到 Xray 配置文件 $XRAY_CONF_PATH)"
+      fi
+      echo
+      echo "提示：若 X25519 privateKey 为空，请在服务器上运行 'xray x25519' 以生成 private/public 并把 privateKey 填入上面的 config.json。"
+      echo "VLESS 连接要点："
+      echo "  - UUID: ${VLESS_UUID}"
+      [[ -n "${XRAY_PUB:-}" ]] && echo "  - X25519 public: ${XRAY_PUB}"
+      echo "  - shortId: ${SHORTID}"
+      echo
+    fi
+
+    if [[ "$INSTALL_HY2" == "true" ]]; then
+      echo "----- Hysteria2: $HY_CONF_PATH -----"
+      if [[ -f "$HY_CONF_PATH" ]]; then
+        sed -n '1,200p' "$HY_CONF_PATH" || true
+      else
+        echo "(未找到 Hysteria 配置文件 $HY_CONF_PATH)"
+      fi
+      echo
+      echo "Hysteria 连接要点："
+      echo "  - password: ${HY_PASS}"
+      if $HY_OBFS; then echo "  - obfs: salamander (password: ${HY_OBFS_PASS})"; fi
+      echo
+    fi
+
+    echo "如需端口跳跃，请在防火墙/路由器上手动配置端口转发。"
+
+    echo
+    info "================= 安装目录信息 ================="
+    echo "各组件的安装目录和配置文件位置："
+    echo
+    if [[ "$INSTALL_XRAY" == "true" ]]; then
+      echo "----- Xray -----"
+      echo "  - 安装目录: /usr/local/share/xray/"
+      echo "  - 配置文件目录: /usr/local/etc/xray/"
+      echo "  - 配置文件: $XRAY_CONF_PATH"
+      echo
+    fi
+
+    if [[ "$INSTALL_HY2" == "true" ]]; then
+      echo "----- Hysteria2 -----"
+      echo "  - 安装目录: $HY_CONF_DIR"
+      echo "  - 配置文件: $HY_CONF_PATH"
+      if [[ "$PM" == "apk" ]]; then
+        echo "  - 二进制文件: $HY_BIN_PATH"
+      fi
+      echo
+    fi
+
+    echo
+    info "================= 服务管理命令 ================="
+    echo "根据您的系统类型，使用以下命令管理服务："
+    echo
+    if command -v systemctl >/dev/null 2>&1; then
+      echo "----- systemd 系统 (如 Ubuntu, CentOS, Debian 等) -----"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "Xray 服务:"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 状态检查: systemctl status xray"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 设置开机启动: systemctl enable xray"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 关闭开机启动: systemctl disable xray"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo ""
+      [[ "$INSTALL_HY2" == "true" ]] && echo "Hysteria 服务:"
+      if [[ "$INSTALL_HY2" == "true" ]]; then
+        if [[ "$PM" == "apk" ]]; then
+          echo "  - 状态检查: systemctl status hysteria"
+          echo "  - 设置开机启动: systemctl enable hysteria"
+          echo "  - 关闭开机启动: systemctl disable hysteria"
+        else
+          echo "  - 状态检查: systemctl status hysteria-server.service"
+          echo "  - 设置开机启动: systemctl enable hysteria-server.service"
+          echo "  - 关闭开机启动: systemctl disable hysteria-server.service"
+        fi
+      fi
+    elif command -v rc-update >/dev/null 2>&1; then
+      echo "----- OpenRC 系统 (如 Alpine Linux 等) -----"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "Xray 服务:"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 状态检查: rc-service xray status"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 设置开机启动: rc-update add xray"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 关闭开机启动: rc-update del xray"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo ""
+      [[ "$INSTALL_HY2" == "true" ]] && echo "Hysteria 服务 (Alpine 系统使用 hysteria 作为服务名):"
+      [[ "$INSTALL_HY2" == "true" ]] && echo "  - 状态检查: rc-service hysteria status"
+      [[ "$INSTALL_HY2" == "true" ]] && echo "  - 设置开机启动: rc-update add hysteria"
+      [[ "$INSTALL_HY2" == "true" ]] && echo "  - 关闭开机启动: rc-update del hysteria"
     else
-      echo "(未找到 Xray 配置文件 $XRAY_CONF_PATH)"
+      echo "----- 未知系统类型 -----"
+      echo "请根据您的系统类型手动管理服务"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "Xray 服务可能的管理命令："
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 状态检查: systemctl status xray / rc-service xray status / service xray status"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo "  - 开机启动: systemctl enable/disable xray / rc-update add/del xray"
+      [[ "$INSTALL_XRAY" == "true" ]] && echo ""
+      [[ "$INSTALL_HY2" == "true" ]] && echo "Hysteria 服务可能的管理命令："
+      if [[ "$INSTALL_HY2" == "true" ]]; then
+        if [[ "$PM" == "apk" ]]; then
+          echo "  - 状态检查: systemctl status hysteria / rc-service hysteria status / service hysteria status"
+          echo "  - 开机启动: systemctl enable/disable hysteria / rc-update add/del hysteria"
+        else
+          echo "  - 状态检查: systemctl status hysteria-server.service / rc-service hysteria-server.service / service hysteria-server.service"
+          echo "  - 开机启动: systemctl enable/disable hysteria-server.service / rc-update add/del hysteria-server.service"
+        fi
+      fi
     fi
-    echo
-    echo "提示：若 X25519 privateKey 为空，请在服务器上运行 'xray x25519' 以生成 private/public 并把 privateKey 填入上面的 config.json。"
-    echo "VLESS 连接要点："
-    echo "  - UUID: ${VLESS_UUID}"
-    [[ -n "${XRAY_PUB:-}" ]] && echo "  - X25519 public: ${XRAY_PUB}"
-    echo "  - shortId: ${SHORTID}"
-    echo
   fi
-
-  if $INSTALL_HY2; then
-    echo "----- Hysteria2: $HY_CONF_PATH -----"
-    if [[ -f "$HY_CONF_PATH" ]]; then
-      sed -n '1,200p' "$HY_CONF_PATH" || true
-    else
-      echo "(未找到 Hysteria 配置文件 $HY_CONF_PATH)"
-    fi
+  
+  # 如果执行了删除操作，显示删除完成提示
+  if [[ "$REMOVE_XRAY" == "true" || "$REMOVE_HY2" == "true" ]]; then
     echo
-    echo "Hysteria 连接要点："
-    echo "  - password: ${HY_PASS}"
-    if $HY_OBFS; then echo "  - obfs: salamander (password: ${HY_OBFS_PASS})"; fi
-    echo
-  fi
-
-  echo "如需端口跳跃，请在防火墙/路由器上手动配置端口转发。"
-
-  echo
-  info "================= 安装目录信息 ================="
-  echo "各组件的安装目录和配置文件位置："
-  echo
-  if $INSTALL_XRAY; then
-    echo "----- Xray -----"
-    echo "  - 安装目录: /usr/local/share/xray/"
-    echo "  - 配置文件目录: /usr/local/etc/xray/"
-    echo "  - 配置文件: $XRAY_CONF_PATH"
-    echo
-  fi
-
-  if $INSTALL_HY2; then
-    echo "----- Hysteria2 -----"
-    echo "  - 安装目录: $HY_CONF_DIR"
-    echo "  - 配置文件: $HY_CONF_PATH"
-    if [[ "$PM" == "apk" ]]; then
-      echo "  - 二进制文件: $HY_BIN_PATH"
-    fi
-    echo
-  fi
-
-  echo
-  info "================= 服务管理命令 ================="
-  echo "根据您的系统类型，使用以下命令管理服务："
-  echo
-  if command -v systemctl >/dev/null 2>&1; then
-    echo "----- systemd 系统 (如 Ubuntu, CentOS, Debian 等) -----"
-    $INSTALL_XRAY && echo "Xray 服务:"
-    $INSTALL_XRAY && echo "  - 状态检查: systemctl status xray"
-    $INSTALL_XRAY && echo "  - 设置开机启动: systemctl enable xray"
-    $INSTALL_XRAY && echo "  - 关闭开机启动: systemctl disable xray"
-    $INSTALL_XRAY && echo ""
-    $INSTALL_HY2 && echo "Hysteria 服务:"
-    $INSTALL_HY2 && echo "  - 状态检查: systemctl status hysteria"
-    $INSTALL_HY2 && echo "  - 设置开机启动: systemctl enable hysteria"
-    $INSTALL_HY2 && echo "  - 关闭开机启动: systemctl disable hysteria"
-  elif command -v rc-update >/dev/null 2>&1; then
-    echo "----- OpenRC 系统 (如 Alpine Linux 等) -----"
-    $INSTALL_XRAY && echo "Xray 服务:"
-    $INSTALL_XRAY && echo "  - 状态检查: rc-service xray status"
-    $INSTALL_XRAY && echo "  - 设置开机启动: rc-update add xray"
-    $INSTALL_XRAY && echo "  - 关闭开机启动: rc-update del xray"
-    $INSTALL_XRAY && echo ""
-    $INSTALL_HY2 && echo "Hysteria 服务:"
-    $INSTALL_HY2 && echo "  - 状态检查: rc-service hysteria status"
-    $INSTALL_HY2 && echo "  - 设置开机启动: rc-update add hysteria"
-    $INSTALL_HY2 && echo "  - 关闭开机启动: rc-update del hysteria"
-  else
-    echo "----- 未知系统类型 -----"
-    echo "请根据您的系统类型手动管理服务"
-    $INSTALL_XRAY && echo "Xray 服务可能的管理命令："
-    $INSTALL_XRAY && echo "  - 状态检查: systemctl status xray / rc-service xray status / service xray status"
-    $INSTALL_XRAY && echo "  - 开机启动: systemctl enable/disable xray / rc-update add/del xray"
-    $INSTALL_XRAY && echo ""
-    $INSTALL_HY2 && echo "Hysteria 服务可能的管理命令："
-    $INSTALL_HY2 && echo "  - 状态检查: systemctl status hysteria / rc-service hysteria status / service hysteria status"
-    $INSTALL_HY2 && echo "  - 开机启动: systemctl enable/disable hysteria / rc-update add/del hysteria"
+    info "================= 删除操作完成 ================="
+    echo "已删除所选服务，相关配置文件和二进制文件已被移除。"
+    echo "如果需要重新安装，请再次运行本脚本并选择安装选项。"
   fi
 }
 
 # 在结束时打印摘要
-after_exit
+# 使用 trap 确保脚本在任何情况下都会调用 after_exit 函数
+trap after_exit EXIT
 
 # 脚本结束
