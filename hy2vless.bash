@@ -304,6 +304,7 @@ fi
 if [[ "$INSTALL_XRAY" == "true" ]]; then
   info "开始安装 Xray (VLESS+REALITY) — 使用官方推荐流程（优先尝试官方安装脚本）。"
 
+  # 先执行安装操作
   if [[ "$PM" == "apk" ]]; then
     info "检测到 Alpine：使用 Xray 官方 Alpine 安装脚本。"
     curl -fsSL -o /tmp/xray-alpine-install.sh https://github.com/XTLS/Xray-install/raw/main/alpinelinux/install-release.sh || true
@@ -323,6 +324,7 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
     fi
   fi
 
+  # 安装完成后，再进行配置
   mkdir -p "$XRAY_CONF_DIR"
 
   # 自动生成 UUID
@@ -414,6 +416,46 @@ fi
 if [[ "$INSTALL_HY2" == "true" ]]; then
   info "开始安装 Hysteria2（优先尝试官方安装器，若为 Alpine 使用轻量二进制+openrc 流程）。"
 
+  # 先执行安装操作
+  if [[ "$PM" == "apk" ]]; then
+    info "检测到 Alpine — 使用二进制下载 + openrc 注册 hysteria（参考 Alpine 专用流程）。"
+    mkdir -p "$HY_CONF_DIR"
+    
+    # 检测系统架构
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64)
+        HY_ARCH="hysteria-linux-amd64"
+        info "检测到 x86_64 架构，将下载 amd64 版本"
+        ;;
+      aarch64|arm64)
+        HY_ARCH="hysteria-linux-arm64"
+        info "检测到 aarch64/arm64 架构，将下载 arm64 版本"
+        ;;
+      *)
+        warn "不支持的架构: $ARCH，将默认使用 amd64 版本"
+        HY_ARCH="hysteria-linux-amd64"
+        ;;
+    esac
+    
+    # 尝试下载最新的 hysteria 二进制
+    if wget -q -O "$HY_BIN_PATH" "https://download.hysteria.network/app/latest/${HY_ARCH}" --no-check-certificate; then
+      chmod 777 "$HY_BIN_PATH"
+      info "hysteria 二进制已下载到 ${HY_BIN_PATH}"
+    else
+      warn "无法下载 hysteria 二进制，考虑使用官方安装脚本或检查网络。"
+    fi
+  else
+    # 为非 Alpine 系统尝试官方安装程序
+    info "正在执行 Hysteria2 官方安装脚本..."
+    if bash <(curl -fsSL https://get.hy2.sh/); then
+      info "调用 Hysteria 官方安装器完成（或已安装）。"
+    else
+      err "调用 Hysteria 官方安装器失败，已生成配置供手动部署。"
+    fi
+  fi
+
+  # 安装完成后，再进行配置
   mkdir -p "$HY_CONF_DIR"
 
   # 自动生成 Hysteria 密码（auth）
@@ -509,35 +551,10 @@ YAML
   # 设置配置文件最宽松权限
   chmod 777 "$HY_CONF_PATH"
 
-  # 根据发行版安装二进制或调用官方安装程序
+  # 尝试启用/重启 hysteria 服务
   if [[ "$PM" == "apk" ]]; then
-    info "检测到 Alpine — 使用二进制下载 + openrc 注册 hysteria（参考 Alpine 专用流程）。"
-    mkdir -p "$HY_CONF_DIR"
-    
-    # 检测系统架构
-    ARCH=$(uname -m)
-    case "$ARCH" in
-      x86_64)
-        HY_ARCH="hysteria-linux-amd64"
-        info "检测到 x86_64 架构，将下载 amd64 版本"
-        ;;
-      aarch64|arm64)
-        HY_ARCH="hysteria-linux-arm64"
-        info "检测到 aarch64/arm64 架构，将下载 arm64 版本"
-        ;;
-      *)
-        warn "不支持的架构: $ARCH，将默认使用 amd64 版本"
-        HY_ARCH="hysteria-linux-amd64"
-        ;;
-    esac
-    
-    # 尝试下载最新的 hysteria 二进制
-    if wget -q -O "$HY_BIN_PATH" "https://download.hysteria.network/app/latest/${HY_ARCH}" --no-check-certificate; then
-      chmod 777 "$HY_BIN_PATH"
-      info "hysteria 二进制已下载到 ${HY_BIN_PATH}"
-
-      # 创建 openrc 服务文件
-      cat > "/etc/init.d/hysteria" <<'EOF'
+    # 创建 openrc 服务文件
+    cat > "/etc/init.d/hysteria" <<'EOF'
 #!/sbin/openrc-run
 
 name="hysteria"
@@ -550,26 +567,16 @@ depend() {
         need networking
 }
 EOF
-      chmod +x /etc/init.d/hysteria
-      rc-update add hysteria default || true
-      rc-service hysteria start || warn "尝试启动 hysteria 服务失败，请手动检查。"
-    else
-      warn "无法下载 hysteria 二进制，考虑使用官方安装脚本或检查网络。"
-    fi
+    chmod +x /etc/init.d/hysteria
+    rc-update add hysteria default || true
+    rc-service hysteria start || warn "尝试启动 hysteria 服务失败，请手动检查。"
   else
-    # 为非 Alpine 系统尝试官方安装程序
-    info "正在执行 Hysteria2 官方安装脚本..."
-    if bash <(curl -fsSL https://get.hy2.sh/); then
-      info "调用 Hysteria 官方安装器完成（或已安装）。"
-    else
-      err "调用 Hysteria 官方安装器失败，已生成配置供手动部署。"
-    fi
-
     # 如果可用，尝试启用 systemd
     if command -v systemctl >/dev/null 2>&1; then
       if systemctl list-unit-files | grep -qi hysteria-server; then
         systemctl daemon-reload || true
-        systemctl enable --now hysteria-server.service || systemctl restart hysteria-server.service || warn "无法自动启动/重启 hysteria-server，请手动检查 systemctl status hysteria-server.service"
+        systemctl enable hysteria-server.service || true
+        systemctl restart hysteria-server.service || warn "无法自动重启 hysteria-server，请手动检查 systemctl status hysteria-server.service"
       fi
     fi
   fi
