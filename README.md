@@ -1,4 +1,4 @@
-# hy2vless - VLESS+XTLS+REALITY 与 Hysteria2 一键安装脚本
+# VLESS+XTLS+REALITY 与 Hysteria2 一键安装脚本
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Shell Script](https://img.shields.io/badge/Shell-Bash-blue.svg)](https://www.gnu.org/software/bash/)
@@ -119,6 +119,7 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/hy2vless/m
 ## 客户端配置
 
 脚本运行完成后，会显示以下连接信息：
+**然后你需要自行配置客户端连接信息。**
 
 ### VLESS+XTLS+REALITY
 
@@ -138,10 +139,6 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/hy2vless/m
 ## 贡献
 
 欢迎提交Issue和Pull Request来帮助改进此项目。
-
-## 免责声明
-
-**重要提示**：请参阅本文档开头的详细免责声明部分。本脚本仅用于合法用途，使用者需自行承担使用风险，并确保遵守当地法律法规。开发者不对使用本脚本造成的任何后果负责。
 
 ## 致谢
 
