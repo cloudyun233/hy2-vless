@@ -216,6 +216,7 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/r
   # obfs: salamander
   # obfs-password: 脚本生成的混淆密码
   tfo: true
+  sni: www.shinnku.com
 ```
 
 ## 许可证
