@@ -59,108 +59,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 ###############################################################################
-# 环境检查函数
-###############################################################################
-
-# 检查必要的环境和工具
-check_environment() {
-  info "检查系统环境和必要工具..."
-  
-  # 检查 bash
-  if ! command -v bash >/dev/null 2>&1; then
-    err "未找到 bash，请先安装 bash。"
-    exit 1
-  fi
-  
-  # 检查是否使用 busybox 提供的 bash
-  if bash --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
-    err "检测到 bash 由 busybox 提供，请使用完整的 GNU bash。"
-    exit 1
-  fi
-  
-  # 检查 grep
-  if ! command -v grep >/dev/null 2>&1; then
-    err "未找到 grep，请先安装 grep。"
-    exit 1
-  fi
-  
-  # 检查是否使用 busybox 提供的 grep
-  if grep --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
-    err "检测到 grep 由 busybox 提供，请使用完整的 GNU grep。"
-    exit 1
-  fi
-  
-  # 检查 curl
-  if ! command -v curl >/dev/null 2>&1; then
-    err "未找到 curl，请先安装 curl。"
-    exit 1
-  fi
-  
-  # 检查是否使用 busybox 提供的 curl
-  if curl --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
-    err "检测到 curl 由 busybox 提供，请使用完整的 GNU curl。"
-    exit 1
-  fi
-  
-  # 检查 GNU Coreutils 工具集中的基本命令
-  local coreutils_commands=("cat" "cp" "mv" "rm" "mkdir" "chmod" "chown" "ls" "sed" "awk")
-  local missing_commands=()
-  local busybox_commands=()
-  
-  for cmd in "${coreutils_commands[@]}"; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-      missing_commands+=("$cmd")
-    elif "$cmd" --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
-      busybox_commands+=("$cmd")
-    fi
-  done
-  
-  if [ ${#missing_commands[@]} -gt 0 ]; then
-    err "缺少以下 GNU Coreutils 工具: ${missing_commands[*]}"
-    err "请先安装 GNU Coreutils 工具集。"
-    exit 1
-  fi
-  
-  if [ ${#busybox_commands[@]} -gt 0 ]; then
-    err "以下工具由 busybox 提供，而非 GNU Coreutils: ${busybox_commands[*]}"
-    err "请使用完整的 GNU Coreutils 工具集替代 busybox 版本。"
-    exit 1
-  fi
-  
-  # 检查 useradd 命令
-  if ! command -v useradd >/dev/null 2>&1; then
-    warn "未找到 useradd，尝试安装..."
-    case "$PM" in
-      apt)
-        apt-get update -y
-        apt-get install -y shadow || warn "无法安装 shadow 包，请手动安装"
-        ;;
-      yum|dnf)
-        yum install -y shadow-utils || dnf install -y shadow-utils || warn "无法安装 shadow-utils 包，请手动安装"
-        ;;
-      apk)
-        apk add --no-cache shadow || warn "无法安装 shadow 包，请手动安装"
-        ;;
-      *)
-        warn "无法识别包管理器，请手动安装包含 useradd 的包"
-        ;;
-    esac
-    
-    # 再次检查 useradd 是否安装成功
-    if ! command -v useradd >/dev/null 2>&1; then
-      warn "useradd 安装失败，某些功能可能受限"
-    else
-      info "useradd 已成功安装"
-    fi
-  else
-    info "useradd 已安装"
-  fi
-  
-  info "环境检查通过，所有必要工具已安装且不是通过 busybox 提供。"
-}
-
-###############################################################################
-# 包管理器检测
+# 环境检查和包管理器检测
 ###############################################################################
 
 # 检测包管理器/发行版
@@ -173,8 +72,65 @@ fi
 
 info "检测到包管理器: ${PM:-(unknown)}"
 
-# 执行环境检查
-check_environment
+# 环境检查和基本工具安装
+setup_environment() {
+  info "检查系统环境和必要工具..."
+  
+  # 合并工具检查，减少重复代码
+  local tools_to_check=("bash" "grep" "curl" "cat" "cp" "mv" "rm" "mkdir" "chmod" "chown" "ls" "sed" "awk" "useradd")
+  local missing_tools=()
+  local busybox_tools=()
+  
+  # 统一检查所有工具
+  for tool in "${tools_to_check[@]}"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      missing_tools+=("$tool")
+    elif [[ "$tool" != "useradd" ]] && "$tool" --version 2>&1 | grep -qi "busybox" >/dev/null 2>&1; then
+      busybox_tools+=("$tool")
+    fi
+  done
+  
+  # 安装缺失工具（包括useradd）
+  if [ ${#missing_tools[@]} -gt 0 ] || [ ${#busybox_tools[@]} -gt 0 ]; then
+    info "安装必要工具..."
+    install_tools_by_pm
+  fi
+  
+  # 验证useradd安装状态
+  if command -v useradd >/dev/null 2>&1; then
+    info "useradd 已安装"
+  else
+    warn "useradd 安装失败，某些功能可能受限"
+  fi
+  
+  info "环境检查完成，所有必要工具已准备就绪。"
+}
+
+# 根据包管理器安装工具
+install_tools_by_pm() {
+  case "$PM" in
+    apt)
+      apt-get update -y
+      apt-get install -y curl wget openssl coreutils bash grep passwd shadow || true
+      ;;
+    yum)
+      yum install -y curl wget openssl coreutils bash grep shadow-utils || true
+      ;;
+    dnf)
+      dnf install -y curl wget openssl coreutils bash grep shadow-utils || true
+      ;;
+    apk)
+      apk add --no-cache curl wget openssl bash grep shadow || true
+      apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community findutils || true
+      ;;
+    *)
+      warn "无法识别包管理器，请确保必要工具已安装。"
+      ;;
+  esac
+}
+
+# 执行环境检查和工具安装
+setup_environment
 
 ###############################################################################
 # 配置变量和辅助函数
@@ -205,50 +161,21 @@ gen_uuid() {
 
 rand_hex(){ openssl rand -hex "${1:-16}"; }
 
-###############################################################################
-# 基本工具安装
-###############################################################################
-
-# 确保基本工具存在(curl/wget/openssl/GNU Coreutils)
-ensure_pkgs(){
-  info "确保基本工具已安装..."
-  case "$PM" in
-    apt)
-      apt-get update -y
-      apt-get install -y curl wget openssl coreutils bash grep passwd || true
-      ;;
-    yum)
-      yum install -y curl wget openssl coreutils bash grep shadow-utils || true
-      ;;
-    dnf)
-      dnf install -y curl wget openssl coreutils bash grep shadow-utils || true
-      ;;
-    apk)
-      apk add --no-cache curl wget openssl bash grep shadow || true
-      # Alpine 默认使用 busybox，需要额外安装 GNU 版本
-      apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community findutils || true
-      ;;
-    *)
-      warn "无法识别包管理器，请确保 curl/wget/openssl/GNU Coreutils/bash/grep/useradd 可用。"
-      ;;
-  esac
-  info "基本工具检查完成。"
+# 防火墙检测函数
+check_firewall() {
+  # 检测nft是否存在（仅使用nft）
+  HAS_NFT=false
+  if command -v nft >/dev/null 2>&1; then
+    HAS_NFT=true
+    info "检测到 nft，可用。"
+  else
+    warn "未检测到 nft，将跳过防火墙自动配置。"
+  fi
 }
 
-ensure_pkgs
 
-###############################################################################
-# 防火墙检测
-###############################################################################
-
-# 检测nft是否存在（仅使用nft）
-HAS_NFT=false
-if command -v nft >/dev/null 2>&1; then
-  HAS_NFT=true
-  info "检测到 nft，可用。"
-else
-  warn "未检测到 nft，将跳过防火墙自动配置。"
-fi
+# 执行防火墙检测
+check_firewall
 
 ###############################################################################
 # 用户菜单
@@ -660,30 +587,18 @@ info "检测并开启 BBR (TCP 拥塞控制算法)..."
 
 # 检查系统内核版本是否支持BBR (4.9+)
 KERNEL_VERSION=$(uname -r | cut -d. -f1,2)
-REQUIRED_VERSION="4.9"
-
-if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$KERNEL_VERSION" | sort -V | head -n1)" = "$REQUIRED_VERSION" ]; then
+if [ "$(printf '%s\n' "$KERNEL_VERSION\n4.9" | sort -V | head -n1)" = "4.9" ]; then
   info "内核版本 $KERNEL_VERSION 支持 BBR"
   
-  # 检查BBR是否已开启
+  # 检查BBR是否已开启，未开启则设置
   if sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
     info "BBR 已开启"
   else
     info "尝试开启 BBR..."
-    
-    # 设置使用BBR算法
     echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
     echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
-    
-    # 应用设置
     sysctl -p
-    
-    # 验证BBR是否成功开启
-    if sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
-      info "BBR 已成功开启"
-    else
-      warn "BBR 开启失败，请手动检查"
-    fi
+    sysctl net.ipv4.tcp_congestion_control | grep -q "bbr" && info "BBR 已成功开启" || warn "BBR 开启失败，请手动检查"
   fi
 else
   warn "内核版本 $KERNEL_VERSION 不支持 BBR，需要 4.9 或更高版本"
@@ -700,29 +615,14 @@ after_exit(){
   # 只在安装操作完成后显示配置信息
   if [[ "$INSTALL_XRAY" == "true" || "$INSTALL_HY2" == "true" ]]; then
     if [[ "$INSTALL_XRAY" == "true" ]]; then
-      echo "----- XRAY: $XRAY_CONF_PATH -----"
-      if [[ -f "$XRAY_CONF_PATH" ]]; then
-        sed -n '1,200p' "$XRAY_CONF_PATH" || true
-      else
-        echo "(未找到 Xray 配置文件 $XRAY_CONF_PATH)"
-      fi
-      echo
-      echo "提示：若 X25519 privateKey 为空，请在服务器上运行 'xray x25519' 以生成 private/public 并把 privateKey 填入上面的 config.json。"
       echo "VLESS 连接要点："
       echo "  - UUID: ${VLESS_UUID}"
-      [[ -n "${XRAY_PUB:-}" ]] && echo "  - X25519 public: ${XRAY_PUB}"
+      echo "  - X25519 public: ${XRAY_PUB}"
       echo "  - shortId: ${SHORTID}"
       echo
     fi
 
     if [[ "$INSTALL_HY2" == "true" ]]; then
-      echo "----- Hysteria2: $HY_CONF_PATH -----"
-      if [[ -f "$HY_CONF_PATH" ]]; then
-        sed -n '1,200p' "$HY_CONF_PATH" || true
-      else
-        echo "(未找到 Hysteria 配置文件 $HY_CONF_PATH)"
-      fi
-      echo
       echo "Hysteria 连接要点："
       echo "  - password: ${HY_PASS}"
       if $HY_OBFS; then echo "  - obfs: salamander (password: ${HY_OBFS_PASS})"; fi
@@ -730,6 +630,7 @@ after_exit(){
     fi
 
     echo "如需端口跳跃，请在防火墙/路由器上手动配置端口转发。"
+    echo "如果是nat机器，需要手动把端口转发到443端口，并在客户端使用你的转发的端口连接"
 
     echo
     info "================= 安装目录信息 ================="
