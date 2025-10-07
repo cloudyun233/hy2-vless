@@ -184,10 +184,10 @@ check_firewall
 # 菜单
 cat <<'MENU'
 请选择要执行的操作（输入数字）:
-  1) 仅安装 VLESS + XTLS + REALITY (Xray)
-  2) 仅安装 Hysteria2
-  3) 仅删除 Xray
-  4) 仅删除 Hysteria2
+  1) 安装 VLESS + XTLS + REALITY (Xray)
+  2) 安装 Hysteria2
+  3) 删除 Xray
+  4) 删除 Hysteria2
 MENU
 read -rp "选择 (1/2/3/4) [1]: " CHOICE
 CHOICE=${CHOICE:-1}
@@ -626,11 +626,11 @@ after_exit(){
       echo "Hysteria 连接要点："
       echo "  - password: ${HY_PASS}"
       if $HY_OBFS; then echo "  - obfs: salamander (password: ${HY_OBFS_PASS})"; fi
+      echo "如需端口跳跃，请手动配置端口转发，然后在客户端使用你的转发的端口范围连接"
       echo
     fi
 
-    echo "如需端口跳跃，请在防火墙/路由器上手动配置端口转发。"
-    echo "如果是nat机器，需要手动把端口转发到443端口，并在客户端使用你的转发的端口连接"
+    echo "如果是nat机器，请手动配置端口转发到443端口，并在客户端使用你的转发的端口连接"
 
     echo
     info "================= 安装目录信息 ================="
