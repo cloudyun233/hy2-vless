@@ -83,9 +83,28 @@ sudo apk add --no-cache curl
 
 ### 2. 在线下载并运行脚本
 
+#### 方法1：分步执行（推荐）
+
+如果遇到 `bash: /dev/fd/xx: No such file or directory` 错误，请使用此方法：
+
+```bash
+# 1. 先下载脚本
+curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash -o hy2vless.bash
+
+# 2. 赋予执行权限
+chmod +x hy2vless.bash
+
+# 3. 执行脚本
+sudo bash hy2vless.bash
+```
+
+#### 方法2：进程替换（某些系统可能不支持）
+
 ```bash
 sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash)
 ```
+
+**注意**：如果方法2出现 `bash: /dev/fd/xx: No such file or directory` 错误，请使用方法1。
 
 ### 3. 选择操作选项
 
