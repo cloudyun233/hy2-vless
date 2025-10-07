@@ -132,6 +132,52 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/hy2vless/m
 - **密码**: 自动生成的密码
 - **混淆**: 如果启用，会显示混淆类型和密码
 
+## Clash Meta 客户端配置模板
+
+以下是 Clash Meta 客户端的配置模板，你可以根据脚本输出的实际值进行填充：
+若是nat服务器，端口填写你的外部端口
+
+### VLESS + XTLS + REALITY 配置模板
+
+```yaml
+- name: 你想取的的名字
+  type: vless
+  server: 你的服务器IP/域名
+  port: 你连接的端口（默认443）
+  udp: true
+  uuid: 脚本生成的UUID
+  flow: xtls-rprx-vision
+  packet-encoding: xudp
+  tls: true
+  servername: www.shinnku.com
+  alpn:
+    - h2
+    - http/1.1
+  client-fingerprint: chrome
+  skip-cert-verify: false
+  reality-opts:
+    public-key: 脚本生成的X25519公钥
+    short-id: 脚本生成的Short ID
+  network: tcp
+```
+
+### Hysteria2 配置模板
+
+```yaml
+- name: 你想取的名字
+  type: hysteria2
+  server: 你的服务器IP/域名
+  port: 你连接的端口（默认443）
+  # 若使用端口跳跃功能，请填写以下配置：
+  #ports: 例如20000-20010
+  password: 
+  skip-cert-verify: true
+  # 若使用混淆功能，请填写以下配置：
+  # obfs: salamander
+  # obfs-password: 脚本生成的混淆密码
+  tfo: true
+```
+
 ## 许可证
 
 本项目采用MIT许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
