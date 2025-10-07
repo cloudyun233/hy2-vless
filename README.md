@@ -84,7 +84,7 @@ sudo apk add --no-cache curl
 ### 2. 在线下载并运行脚本
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/hy2vless/main/hy2vless.bash)
+sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash)
 ```
 
 ### 3. 选择操作选项
