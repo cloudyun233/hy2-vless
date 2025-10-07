@@ -170,7 +170,7 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/hy2vless/m
   port: 你连接的端口（默认443）
   # 若使用端口跳跃功能，请填写以下配置：
   #ports: 例如20000-20010
-  password: 
+  password: 脚本生成的密码
   skip-cert-verify: true
   # 若使用混淆功能，请填写以下配置：
   # obfs: salamander
