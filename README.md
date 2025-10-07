@@ -43,7 +43,7 @@
 
 ## 功能特点
 
-- 🚀 **一键安装**: 支持单独或同时安装 VLESS+XTLS+REALITY (Xray) 和 Hysteria2
+- 🚀 **一键安装/删除**: 支持安装和删除 VLESS+XTLS+REALITY (Xray) 和 Hysteria2
 - 🌍 **多系统支持**: 自动检测并适配多种Linux发行版 (Ubuntu, Debian, CentOS, Alpine等)
 - 🔒 **安全配置**: 自动生成UUID、密钥和证书
 - 🛡️ **防火墙集成**: 自动配置nftables防火墙规则
@@ -87,34 +87,51 @@ sudo apk add --no-cache curl
 sudo bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/hy2vless/main/hy2vless.bash)
 ```
 
-### 3. 选择安装选项
+### 3. 选择操作选项
 
 脚本会显示以下菜单:
 ```
-请选择要安装的协议（输入数字）:
-  1) 仅安装 VLESS + XTLS + REALITY (Xray)
-  2) 仅安装 Hysteria2
-  3) 两者都安装
-选择 (1/2/3) [1]:
+请选择要执行的操作（输入数字）:
+  1) 安装 VLESS + XTLS + REALITY (Xray)
+  2) 安装 Hysteria2
+  3) 删除 Xray
+  4) 删除 Hysteria2
+选择 (1/2/3/4) [1]:
 ```
 
 根据需要输入对应的数字并按回车。
+
+### 4. 防火墙和BBR配置
+
+脚本会自动：
+- 检测并配置nftables防火墙规则（如果系统支持）
+- 检测并开启BBR拥塞控制算法（如果内核支持）
+- 询问是否持久化nftables规则
+
+### 5. 服务管理
+
+安装完成后，脚本会显示详细的服务管理命令和配置信息。根据您的系统类型（systemd或OpenRC），使用相应的命令管理服务。
 
 ## 配置详情
 
 ### VLESS+XTLS+REALITY (Xray)
 
 - **配置文件位置**: `/usr/local/etc/xray/config.json`
+- **安装目录**: `/usr/local/share/xray/`
 - **默认端口**: 443 (TCP)
 - **认证方式**: UUID (自动生成)
 - **安全特性**: XTLS + REALITY
+- **REALITY配置**: 使用 `www.shinnku.com:443` 作为目标
 
 ### Hysteria2
 
 - **配置文件位置**: `/etc/hysteria/config.yaml`
+- **安装目录**: `/etc/hysteria/`
 - **默认端口**: 443 (UDP)
 - **认证方式**: 密码 (自动生成)
 - **TLS选项**: 支持ACME自动证书或自签名证书
+- **混淆**: 可选的salamander混淆
+- **伪装**: 使用 `https://www.shinnku.com/` 进行代理伪装
 
 ## 客户端配置
 
@@ -131,6 +148,10 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/hy2vless/m
 
 - **密码**: 自动生成的密码
 - **混淆**: 如果启用，会显示混淆类型和密码
+
+### NAT服务器说明
+
+如果是NAT机器，请手动配置端口转发到443端口，并在客户端使用你的转发的端口连接。
 
 ## Clash Meta 客户端配置模板
 
