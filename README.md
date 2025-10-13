@@ -232,3 +232,11 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/r
 
 - [Xray-project](https://github.com/XTLS/Xray-core) - 提供Xray核心
 - [Hysteria](https://github.com/apernet/hysteria) - 提供Hysteria2协议实现
+
+## 定时重启任务
+
+以下cron任务可用于每天UTC20:00重启服务器点自动重启服务器：
+
+```
+0 20 * * * /sbin/reboot
+```
