@@ -188,17 +188,20 @@ cat <<'MENU'
   2) 安装 Hysteria2
   3) 删除 Xray
   4) 删除 Hysteria2
+  5) IP 质量检测
 MENU
-read -rp "选择 (1/2/3/4) [1]: " CHOICE
+read -rp "选择 (1/2/3/4/5) [1]: " CHOICE
 CHOICE=${CHOICE:-1}
 INSTALL_XRAY=false
 INSTALL_HY2=false
 REMOVE_XRAY=false
 REMOVE_HY2=false
+CHECK_IP=false
 [[ "$CHOICE" == "1" ]] && INSTALL_XRAY=true
 [[ "$CHOICE" == "2" ]] && INSTALL_HY2=true
 [[ "$CHOICE" == "3" ]] && REMOVE_XRAY=true
 [[ "$CHOICE" == "4" ]] && REMOVE_HY2=true
+[[ "$CHOICE" == "5" ]] && CHECK_IP=true
 
 ###############################################################################
 # 删除函数
@@ -246,6 +249,23 @@ remove_hy2() {
   fi
 }
 
+# IP 质量检测
+check_ip_quality() {
+  info "开始进行 IP 质量检测..."
+  info "使用 IPQuality 工具检测当前服务器 IP 的质量"
+  echo "===================================="
+  
+  # 执行 IP 质量检测
+  if bash <(curl -Ls https://IP.Check.Place); then
+    info "IP 质量检测完成"
+  else
+    err "IP 质量检测失败，请检查网络连接或稍后重试"
+  fi
+  
+  echo "===================================="
+  info "IP 质量检测结束"
+}
+
 # 执行删除操作
 if [[ "$REMOVE_XRAY" == "true" ]]; then
   remove_xray
@@ -255,9 +275,14 @@ if [[ "$REMOVE_HY2" == "true" ]]; then
   remove_hy2
 fi
 
-# 如果只是删除操作，完成后退出
-if [[ "$REMOVE_XRAY" == "true" || "$REMOVE_HY2" == "true" ]] && [[ "$INSTALL_XRAY" != "true" && "$INSTALL_HY2" != "true" ]]; then
-  info "删除操作完成"
+# 执行 IP 质量检测
+if [[ "$CHECK_IP" == "true" ]]; then
+  check_ip_quality
+fi
+
+# 如果只是删除操作或IP检测，完成后退出
+if [[ "$REMOVE_XRAY" == "true" || "$REMOVE_HY2" == "true" || "$CHECK_IP" == "true" ]] && [[ "$INSTALL_XRAY" != "true" && "$INSTALL_HY2" != "true" ]]; then
+  info "操作完成"
   exit 0
 fi
 
