@@ -188,7 +188,7 @@ cat <<'MENU'
   2) 安装 Hysteria2
   3) 删除 Xray
   4) 删除 Hysteria2
-  5) IP 质量检测
+  5) IP 质量检测（若运行时卡住，可能是因为内存不足）
 MENU
 read -rp "选择 (1/2/3/4/5) [1]: " CHOICE
 CHOICE=${CHOICE:-1}
@@ -451,7 +451,7 @@ if [[ "$INSTALL_HY2" == "true" ]]; then
   info "自动生成 Hysteria password: $HY_PASS"
 
   # 混淆可选
-  read -rp "是否启用混淆 (salamander)？这会使得外部看起来是随机字节流，但会失去http3伪装 [y/N]: " _ob
+  read -rp "是否启用混淆 (salamander)?这会使得外部看起来是随机字节流,但会失去http3伪装(若使用非443端口建议打开) [y/N]: " _ob
   HY_OBFS=false
   HY_OBFS_PASS=""
   if [[ "${_ob,,}" =~ ^y(es)?$ ]]; then
@@ -696,7 +696,7 @@ after_exit(){
       echo
     fi
 
-    echo "如果是nat机器，请手动配置端口转发到443端口，并在客户端使用你的转发的端口连接"
+    echo "若准备使用不同端口连接,请手动配置端口转发到443端口,并在客户端使用你的转发的端口连接"
 
     echo
     info "================= 安装目录信息 ================="
