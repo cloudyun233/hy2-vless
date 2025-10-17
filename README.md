@@ -240,3 +240,38 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/r
 ```
 0 20 * * * /sbin/reboot
 ```
+
+## 校园网破解绕过部署方式
+
+在某些限制性网络环境（如校园网）中，可以通过以下方式绕过限制：
+
+1. **部署Hysteria2服务**
+   - 使用本脚本安装Hysteria2（选择选项2）
+   - 服务将运行在默认的443端口
+
+2. **配置防火墙端口转发，以下是nftables配置示例**
+
+    若为iptables，参考以下自行配置
+
+   ```bash
+   # 将53端口(DNS)流量转发到443端口
+   sudo nft add rule ip nat prerouting udp dport 53 redirect to 443
+   
+   # 也可以添加其他常用端口，如67、68等
+   sudo nft add rule ip nat prerouting udp dport 67 redirect to 443
+   sudo nft add rule ip nat prerouting udp dport 68 redirect to 443
+   ```
+  可能需要额外配置持久化，自行搜索nftables持久化配置
+
+3. **客户端连接配置**
+   - 在客户端使用53端口（或其他转发端口）连接服务器
+   - Clash Meta配置示例：
+   ```yaml
+   - name: 校园网绕过
+     type: hysteria2
+     server: 你的服务器IP/域名
+     port: 53  # 使用转发的端口
+     #其余同上
+   ```
+
+**注意**：此方法仅用于合法的网络环境测试，请确保遵守当地法律法规和网络使用政策。
