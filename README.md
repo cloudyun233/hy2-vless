@@ -194,7 +194,7 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/r
     - h2
     - http/1.1
   client-fingerprint: chrome
-  skip-cert-verify: false
+  skip-cert-verify: true #此项有点玄学，有时候改为false也可以连接
   reality-opts:
     public-key: 脚本生成的X25519公钥
     short-id: 脚本生成的Short ID
@@ -216,7 +216,7 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/r
   # obfs: salamander
   # obfs-password: 脚本生成的混淆密码
   tfo: true
-  # 若使用混淆功能，不填写以下配置：
+  # 若使用混淆功能，不填写以下配置，此配置推荐在连接端口为443时使用
   # sni: www.shinnku.com
 ```
 
