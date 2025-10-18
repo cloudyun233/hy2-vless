@@ -451,7 +451,7 @@ if [[ "$INSTALL_HY2" == "true" ]]; then
   info "自动生成 Hysteria password: $HY_PASS"
 
   # 混淆可选
-  read -rp "是否启用混淆 (salamander)?这会使得外部看起来是随机字节流,但会失去http3伪装(一般不需要打开) [y/N]: " _ob
+  read -rp "是否启用混淆?这会使得外部看起来是随机字节流,但会失去http3伪装(在443端口一般不需要打开) [y/N]: " _ob
   HY_OBFS=false
   HY_OBFS_PASS=""
   if [[ "${_ob,,}" =~ ^y(es)?$ ]]; then
