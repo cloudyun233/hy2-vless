@@ -5,39 +5,16 @@
 
 ## ⚠️ 重要免责声明
 
-**请仔细阅读以下免责声明，使用本脚本即表示您已阅读、理解并同意以下所有条款。**
+**使用本脚本即表示您已阅读、理解并同意以下所有条款。**
 
-### 法律合规性
-- 本脚本仅用于**合法用途**，包括但不限于学术研究、网络安全测试、个人隐私保护等符合当地法律法规的场景
-- 使用者**必须**确保其使用行为符合所在国家/地区的法律法规
-- 开发者**明确反对**任何形式的非法网络活动，包括但不限于未经授权的网络访问、数据窃取、网络攻击等
-
-### 使用风险
-- 本脚本按"原样"提供，**不提供任何形式的明示或暗示担保**，包括但不限于适销性、特定用途适用性和非侵权性的担保
-- 使用者需**自行承担**使用本脚本可能带来的所有风险，包括但不限于系统安全风险、数据丢失风险、法律风险等
-- 开发者**不对**使用本脚本可能导致的任何直接或间接损失负责，包括但不限于数据丢失、设备损坏、法律纠纷等
-
-### 安全提醒
-- 本脚本部署的服务可能涉及网络流量转发，请确保您有合法权限进行相关操作
-- 请妥善保管脚本生成的所有密钥、证书和配置信息，**切勿泄露**给未经授权的人员
-- 建议定期更新系统和相关软件，以确保安全性
-- 在生产环境使用前，请充分测试并评估安全性
-
-### 隐私与数据
-- 本脚本**不会收集**任何用户数据或个人信息
-- 脚本运行过程中生成的所有配置和密钥均存储在**本地**，不会上传到任何远程服务器
-- 使用者需自行负责保护服务器和客户端的数据安全
-
-### 责任限制
-- 在任何情况下，开发者均不对因使用或无法使用本脚本而导致的任何利润损失、数据丢失、业务中断或其他间接、特殊、偶然或后果性损害承担责任
-- 开发者保留随时修改、更新或终止本脚本的权利，恕不另行通知
-
-### 最终条款
-- 如您不同意以上任何条款，请**立即停止使用**本脚本
-- 本免责声明的解释权归开发者所有，开发者有权随时修改免责声明内容
-- 如有疑问，请咨询相关法律专业人士
+- 本脚本仅用于**合法用途**，使用者必须确保符合当地法律法规
+- 开发者明确反对任何非法网络活动
+- 使用者需自行承担使用风险，开发者不对任何损失负责
+- 脚本不会收集用户数据，所有配置和密钥均存储在本地
 
 ---
+
+## 简介
 
 一个用于在Linux服务器上快速部署 VLESS+XTLS+REALITY (Xray) 和/或 Hysteria2 协议的Bash脚本。
 
@@ -55,60 +32,48 @@
 - Linux操作系统 (支持apt/dnf/yum/apk包管理器的发行版)
 - root权限或sudo权限
 
-## 安装与使用
+## 快速开始
 
-### 1. 确保系统已安装curl
+### 1. 安装curl
 
-如果系统中没有安装curl，请先执行以下命令安装：
-
-**Ubuntu/Debian:**
 ```bash
+# Ubuntu/Debian
 sudo apt update && sudo apt install -y curl
-```
 
-**CentOS/RHEL:**
-```bash
+# CentOS/RHEL
 sudo yum install -y curl
-```
 
-**Fedora:**
-```bash
+# Fedora
 sudo dnf install -y curl
-```
 
-**Alpine Linux:**
-```bash
+# Alpine Linux
 sudo apk add --no-cache curl
 ```
 
-### 2. 在线下载并运行脚本
+### 2. 运行脚本
 
 #### 方法1：分步执行（推荐）
 
-如果遇到 `bash: /dev/fd/xx: No such file or directory` 错误，请使用此方法：
-
 ```bash
-# 1. 先下载脚本
+# 下载脚本
 curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash -o hy2vless.bash
 
-# 2. 赋予执行权限
+# 赋予执行权限
 chmod +x hy2vless.bash
 
-# 3. 执行脚本
-sudo bash hy2vless.bash
+# 执行脚本
+bash hy2vless.bash
 ```
 
-#### 方法2：进程替换（某些系统可能不支持）
+#### 方法2：进程替换
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash)
+bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash)
 ```
 
-**注意**：如果方法2出现 `bash: /dev/fd/xx: No such file or directory` 错误，请使用方法1。
+### 3. 选择操作
 
-### 3. 选择操作选项
-
-脚本会显示以下菜单:
+脚本菜单选项：
 ```
 请选择要执行的操作（输入数字）:
   1) 安装 VLESS + XTLS + REALITY (Xray)
@@ -118,72 +83,35 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/r
 选择 (1/2/3/4) [1]:
 ```
 
-根据需要输入对应的数字并按回车。
-
-### 4. 防火墙和BBR配置
-
-脚本会自动：
-- 检测并配置nftables防火墙规则（如果系统支持）
-- 检测并开启BBR拥塞控制算法（如果内核支持）
-- 询问是否持久化nftables规则
-
-### 5. 服务管理
-
-安装完成后，脚本会显示详细的服务管理命令和配置信息。根据您的系统类型（systemd或OpenRC），使用相应的命令管理服务。
-
-## 配置详情
+## 配置信息
 
 ### VLESS+XTLS+REALITY (Xray)
 
-- **配置文件位置**: `/usr/local/etc/xray/config.json`
+- **配置文件**: `/usr/local/etc/xray/config.json`
 - **安装目录**: `/usr/local/share/xray/`
 - **默认端口**: 443 (TCP)
 - **认证方式**: UUID (自动生成)
 - **安全特性**: XTLS + REALITY
-- **REALITY配置**: 使用 `www.shinnku.com:443` 作为目标
+- **目标站点**: `www.shinnku.com:443`
 
 ### Hysteria2
 
-- **配置文件位置**: `/etc/hysteria/config.yaml`
+- **配置文件**: `/etc/hysteria/config.yaml`
 - **安装目录**: `/etc/hysteria/`
 - **默认端口**: 443 (UDP)
 - **认证方式**: 密码 (自动生成)
 - **TLS选项**: 支持ACME自动证书或自签名证书
-- **混淆**: 可选的salamander混淆
 - **伪装**: 使用 `https://www.shinnku.com/` 进行代理伪装
 
-## 客户端配置
+## Clash Meta 客户端配置
 
-脚本运行完成后，会显示以下连接信息：
-**然后你需要自行配置客户端连接信息。**
-
-### VLESS+XTLS+REALITY
-
-- **UUID**: 自动生成的UUID
-- **X25519 Public Key**: 自动生成的公钥
-- **Short ID**: 自动生成的短ID
-
-### Hysteria2
-
-- **密码**: 自动生成的密码
-- **混淆**: 如果启用，会显示混淆类型和密码
-
-### NAT服务器说明
-
-如果是NAT机器，请手动配置端口转发到443端口，并在客户端使用你的转发的端口连接。
-
-## Clash Meta 客户端配置模板
-
-以下是 Clash Meta 客户端的配置模板，你可以根据脚本输出的实际值进行填充：
-若是nat服务器，端口填写你的外部端口
-
-### VLESS + XTLS + REALITY 配置模板
+### VLESS + XTLS + REALITY
 
 ```yaml
-- name: 你想取的的名字
+- name: 服务器名称
   type: vless
-  server: 你的服务器IP/域名
-  port: 你连接的端口（默认443）
+  server: 服务器IP/域名
+  port: 端口（默认443）
   udp: true
   uuid: 脚本生成的UUID
   flow: xtls-rprx-vision
@@ -194,83 +122,70 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/r
     - h2
     - http/1.1
   client-fingerprint: chrome
-  skip-cert-verify: true #此项有点玄学，有时候改为false也可以连接
+  skip-cert-verify: true
   reality-opts:
     public-key: 脚本生成的X25519公钥
     short-id: 脚本生成的Short ID
   network: tcp
 ```
 
-### Hysteria2 配置模板
+### Hysteria2
 
 ```yaml
-- name: 你想取的名字
+- name: 服务器名称
   type: hysteria2
-  server: 你的服务器IP/域名
-  port: 你连接的端口（默认443）
-  # 若使用端口跳跃功能，请填写以下配置：
-  #ports: 例如20000-20010
+  server: 服务器IP/域名
+  port: 端口（默认443）
   password: 脚本生成的密码
   skip-cert-verify: true
-  # 若使用混淆功能，请填写以下配置：
-  # obfs: salamander
-  # obfs-password: 脚本生成的混淆密码
   tfo: true
-
+  # 可选配置
+  # ports: 20000-20010  # 端口跳跃
+  # obfs: salamander    # 混淆
+  # obfs-password: 混淆密码
 ```
 
-## 许可证
+## 特殊场景
 
-本项目采用MIT许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
+### NAT服务器
 
-## 贡献
+如果是NAT机器，请手动配置端口转发到443端口，并在客户端使用转发的端口连接。
 
-欢迎提交Issue和Pull Request来帮助改进此项目。
+### 校园网绕过
 
-## 致谢
+在某些限制性网络环境中，可通过以下方式绕过限制：
 
-- [Xray-project](https://github.com/XTLS/Xray-core) - 提供Xray核心
-- [Hysteria](https://github.com/apernet/hysteria) - 提供Hysteria2协议实现
+1. 安装Hysteria2服务（选择选项2）
+2. 配置防火墙端口转发（以nftables为例）：
 
-## 定时重启任务
+```bash
+# 将53端口(DNS)流量转发到443端口
+sudo nft add rule ip nat prerouting udp dport 53 redirect to 443
 
-以下cron任务可用于每天UTC20:00重启服务器点自动重启服务器：
+# 添加其他常用端口
+sudo nft add rule ip nat prerouting udp dport 67 redirect to 443
+sudo nft add rule ip nat prerouting udp dport 68 redirect to 443
+```
+
+3. 客户端使用53端口（或其他转发端口）连接
+
+## 维护
+
+### 定时重启任务
+
+以下cron任务可用于每天UTC20:00自动重启服务器：
 
 ```
 0 20 * * * /sbin/reboot
 ```
 
-## 校园网破解绕过部署方式
+## 许可证与致谢
 
-在某些限制性网络环境（如校园网）中，可以通过以下方式绕过限制：
+- 本项目采用MIT许可证
+- 致谢：
+  - [Xray-project](https://github.com/XTLS/Xray-core) - 提供Xray核心
+  - [Hysteria](https://github.com/apernet/hysteria) - 提供Hysteria2协议实现
 
-1. **部署Hysteria2服务**
-   - 使用本脚本安装Hysteria2（选择选项2）
-   - 服务将运行在默认的443端口
+## 贡献
 
-2. **配置防火墙端口转发，以下是nftables配置示例**
-
-    若为iptables，参考以下自行配置
-
-   ```bash
-   # 将53端口(DNS)流量转发到443端口
-   sudo nft add rule ip nat prerouting udp dport 53 redirect to 443
-   
-   # 也可以添加其他常用端口，如67、68等
-   sudo nft add rule ip nat prerouting udp dport 67 redirect to 443
-   sudo nft add rule ip nat prerouting udp dport 68 redirect to 443
-   ```
-  可能需要额外配置持久化，自行搜索nftables持久化配置
-
-3. **客户端连接配置**
-   - 在客户端使用53端口（或其他转发端口）连接服务器
-   - Clash Meta配置示例：
-   ```yaml
-   - name: 校园网绕过
-     type: hysteria2
-     server: 你的服务器IP/域名
-     port: 53  # 使用转发的端口
-     #其余同上
-   ```
-
-**注意**：此方法仅用于合法的网络环境测试，请确保遵守当地法律法规和网络使用政策。
+欢迎提交Issue和Pull Request来帮助改进此项目。
