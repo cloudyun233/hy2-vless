@@ -596,36 +596,24 @@ fi
 ###############################################################################
 # 防火墙: 使用 nft 添加允许规则（仅 nft）
 ###############################################################################
-info "为 Xray (TCP ${XRAY_PORT_TCP}) 与 Hysteria (UDP ${HY2_PORT_UDP}) 添加 nft 入站允许规则（若支持 nft）..."
+info "为 TCP 443 与 UDP 443 端口添加 nft 入站允许规则（若支持 nft）..."
 
 if $HAS_NFT; then
   nft list table inet filter >/dev/null 2>&1 || nft add table inet filter
   nft list chain inet filter input >/dev/null 2>&1 || nft add chain inet filter input { type filter hook input priority 0 \; policy accept \; }
 
-  nft add rule inet filter input tcp dport ${XRAY_PORT_TCP} ct state new,established accept >/dev/null 2>&1 || true
-  nft add rule inet filter input udp dport ${HY2_PORT_UDP} ct state new,established accept >/dev/null 2>&1 || true
+  nft add rule inet filter input tcp dport 443 ct state new,established accept >/dev/null 2>&1 || true
+  nft add rule inet filter input udp dport 443 ct state new,established accept >/dev/null 2>&1 || true
 
-  info "已向 nft 添加放行规则 (tcp ${XRAY_PORT_TCP}, udp ${HY2_PORT_UDP})。"
+  info "已向 nft 添加放行规则 (tcp 443, udp 443)。"
 else
-  warn "系统未安装或找不到 nft，已跳过自动添加防火墙规则。请手动放行对应端口。"
+  warn "系统未安装或找不到 nft，已跳过自动添加防火墙规则。请手动放行443端口。"
 fi
 
 # 持久化 nft 选项（仅当 nft 可用时）
 if $HAS_NFT; then
-  echo
-  read -rp "检测到 nft，是否将当前 nft ruleset 持久化到 /etc/nftables.conf 并尝试启用 nftables 服务？ [y/N]: " _p
-  if [[ "${_p,,}" =~ ^y(es)?$ ]]; then
-    nft list ruleset > /etc/nftables.conf
-    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -qi nftables; then
-      systemctl enable --now nftables || warn "启用 nftables 服务失败，请手动检查。"
-    elif command -v rc-update >/dev/null 2>&1; then
-      # Alpine: nft 持久化可能有所不同
-      warn "在 Alpine 环境中，请根据发行版习惯持久化 /etc/nftables.conf 并在启动脚本中加载。"
-    fi
-    info "已导出 /etc/nftables.conf 并尝试启用 nftables 服务。"
-  else
-    info "你选择不持久化 nft 规则。重启后请确保规则存在或手动恢复。"
-  fi
+  nft list ruleset > /etc/nftables.conf
+  info "已导出 /etc/nftables.conf。"
 fi
 
 ###############################################################################
