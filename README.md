@@ -16,16 +16,9 @@
 
 ## 简介
 
-一个用于在Linux服务器上快速部署 VLESS+XTLS+REALITY (Xray) 和/或 Hysteria2 协议的Bash脚本。
-
-## 功能特点
-
-- 🚀 **一键安装/删除**: 支持安装和删除 VLESS+XTLS+REALITY (Xray) 和 Hysteria2
-- 🌍 **多系统支持**: 自动检测并适配多种Linux发行版 (Ubuntu, Debian, CentOS, Alpine等)
-- 🔒 **安全配置**: 自动生成UUID、密钥和证书
-- 🛡️ **防火墙集成**: 自动配置nftables防火墙规则
-- ⚡ **性能优化**: 自动检测并开启BBR拥塞控制算法
-- 📝 **详细输出**: 提供完整的配置信息和服务管理命令
+本项目包含两个脚本，用于在Linux服务器上快速部署：
+1. **hy2vless.bash** - VLESS+XTLS+REALITY (Xray) 和/或 Hysteria2 协议的一键安装/卸载脚本
+2. **deploy_caddy.sh** - Caddy 反向代理服务器部署脚本，用于伪装服务器
 
 ## 系统要求
 
@@ -36,21 +29,7 @@
 
 ### 1. 安装curl
 
-```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt install -y curl
-
-# CentOS/RHEL
-sudo yum install -y curl
-
-# Fedora
-sudo dnf install -y curl
-
-# Alpine Linux
-sudo apk add --no-cache curl
-```
-
-### 2. 运行脚本
+### 2. 运行主脚本
 
 #### 方法1：分步执行（推荐）
 
@@ -71,16 +50,25 @@ bash hy2vless.bash
 bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash)
 ```
 
-### 3. 选择操作
+### 4. 安装Caddy反向代理（可选，但是你必须有指向服务器IP的域名。毕竟域名你都没有，你怎么伪装成真实的网站）
 
-脚本菜单选项：
+#### 方法1：分步执行（推荐）
+
+```bash
+# 下载脚本
+curl -fsSL https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/deploy_caddy.sh -o deploy_caddy.sh
+
+# 赋予执行权限
+chmod +x deploy_caddy.sh
+
+# 执行脚本
+bash deploy_caddy.sh
 ```
-请选择要执行的操作（输入数字）:
-  1) 安装 VLESS + XTLS + REALITY (Xray)
-  2) 安装 Hysteria2
-  3) 删除 Xray
-  4) 删除 Hysteria2
-选择 (1/2/3/4) [1]:
+
+#### 方法2：进程替换
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/deploy_caddy.sh)
 ```
 
 ## 配置信息
@@ -90,18 +78,19 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/hea
 - **配置文件**: `/usr/local/etc/xray/config.json`
 - **安装目录**: `/usr/local/share/xray/`
 - **默认端口**: 443 (TCP)
-- **认证方式**: UUID (自动生成)
-- **安全特性**: XTLS + REALITY
-- **目标站点**: `www.shinnku.com:443`
+
 
 ### Hysteria2
 
 - **配置文件**: `/etc/hysteria/config.yaml`
 - **安装目录**: `/etc/hysteria/`
 - **默认端口**: 443 (UDP)
-- **认证方式**: 密码 (自动生成)
-- **TLS选项**: 支持ACME自动证书或自签名证书
-- **伪装**: 使用 `https://www.shinnku.com/` 进行代理伪装
+
+
+### Caddy反向代理
+
+- **配置文件**: `/etc/caddy/Caddyfile`
+
 
 ## Clash Meta 客户端配置
 
@@ -147,10 +136,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/hea
 
 ## 特殊场景
 
-### NAT服务器
-
-如果是NAT机器，请手动配置端口转发到443端口，并在客户端使用转发的端口连接。
-
 ### 校园网绕过
 
 在某些限制性网络环境中，可通过以下方式绕过限制：
@@ -185,6 +170,8 @@ sudo nft add rule ip nat prerouting udp dport 68 redirect to 443
 - 致谢：
   - [Xray-project](https://github.com/XTLS/Xray-core) - 提供Xray核心
   - [Hysteria](https://github.com/apernet/hysteria) - 提供Hysteria2协议实现
+  - [Caddy](https://github.com/caddyserver/caddy) - 提供反向代理功能
+  - [IPQuality](https://github.com/xykt/IPQuality) - 提供IP质量检测服务
 
 ## 贡献
 
