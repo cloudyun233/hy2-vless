@@ -479,28 +479,17 @@ if [[ "$INSTALL_HY2" == "true" ]]; then
   else
     info "生成自签名证书到 /etc/hysteria/server.crt & server.key"
     mkdir -p "$HY_CONF_DIR"
-    # 创建包含subjectAltName扩展的配置文件
+    # 创建基本的自签名证书配置文件
     cat > /tmp/hy2-cert.conf <<EOF
 [req]
 distinguished_name = req_distinguished_name
-req_extensions = v3_req
 prompt = no
 
 [req_distinguished_name]
 CN = www.shinnku.com
-
-[v3_req]
-keyUsage = keyEncipherment, dataEncipherment
-extendedKeyUsage = serverAuth
-subjectAltName = @alt_names
-
-[alt_names]
-DNS.1 = www.shinnku.com
-DNS.2 = shinnku.com
-IP.1 = 127.0.0.1
 EOF
-    # 使用配置文件生成包含subjectAltName扩展的自签名证书
-    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -keyout /etc/hysteria/server.key -out /etc/hysteria/server.crt -days 36500 -config /tmp/hy2-cert.conf -extensions v3_req && sudo chown hysteria /etc/hysteria/server.key && sudo chown hysteria /etc/hysteria/server.crt
+    # 使用配置文件生成基本自签名证书
+    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -keyout /etc/hysteria/server.key -out /etc/hysteria/server.crt -days 36500 -config /tmp/hy2-cert.conf && sudo chown hysteria /etc/hysteria/server.key && sudo chown hysteria /etc/hysteria/server.crt
     # 清理临时配置文件
     rm -f /tmp/hy2-cert.conf
     HY_TLS_CERT="/etc/hysteria/server.crt"
