@@ -114,7 +114,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/hea
   skip-cert-verify: true
   reality-opts:
     public-key: 脚本生成的X25519公钥
-    short-id: 脚本生成的Short ID
   network: tcp
 ```
 
