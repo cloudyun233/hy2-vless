@@ -3,6 +3,7 @@
 # Caddy 部署与管理脚本
 # 目标：反向代理 https://www.shinnku.com
 # 功能：包管理器安装、交互式配置端口和域名、禁用HTTP3、卸载
+# 支持系统：Debian, Ubuntu, Raspbian, Fedora, RedHat, CentOS
 
 # --- 颜色定义 ---
 GREEN='\033[0;32m'
@@ -14,8 +15,21 @@ NC='\033[0m' # No Color
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo -e "${RED}错误：此脚本必须以 root 权限运行。${NC}"
-        echo -e "请尝试使用 'sudo bash $0' 运行。"
+        if [ -n "$SUDO_USER" ]; then
+            echo -e "检测到您正在使用 sudo，但权限提升失败。"
+            echo -e "请检查您的 sudo 配置或联系管理员。"
+        else
+            echo -e "请尝试使用 'sudo bash $0' 运行。"
+        fi
         exit 1
+    fi
+    
+    # 检查是否通过 sudo 运行
+    if [ -n "$SUDO_USER" ]; then
+        echo -e "${GREEN}检测到通过 sudo 运行，原始用户: $SUDO_USER${NC}"
+    else
+        echo -e "${YELLOW}警告：您正在以 root 用户直接运行脚本。${NC}"
+        echo -e "建议使用 'sudo bash $0' 以获得更好的安全性。"
     fi
 }
 
@@ -37,28 +51,48 @@ install_caddy() {
     
     echo -e "${GREEN}正在安装 Caddy...${NC}"
     
-    if [ "$OS_ID" == "ubuntu" ] || [ "$OS_ID" == "debian" ]; then
-        # Debian/Ubuntu
-        echo "检测到 Debian/Ubuntu 系统。"
-        apt install -y debian-keyring debian-archive-keyring apt-transport-https
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-        apt update
-        apt install -y caddy
+    if [ "$OS_ID" == "ubuntu" ] || [ "$OS_ID" == "debian" ] || [ "$OS_ID" == "raspbian" ]; then
+        # Debian/Ubuntu/Raspbian
+        echo "检测到 Debian/Ubuntu/Raspbian 系统。"
+        # 按照官方文档步骤安装
+        sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+        chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        chmod o+r /etc/apt/sources.list.d/caddy-stable.list
+        sudo apt update
+        sudo apt install -y caddy
         
-    elif [ "$OS_ID" == "fedora" ] || [ "$OS_ID" == "centos" ] || [ "$OS_ID" == "rhel" ] || [ "$OS_ID" == "rocky" ] || [ "$OS_ID" == "almalinux" ]; then
-        # RHEL/Fedora
+    elif [ "$OS_ID" == "fedora" ] || [ "$OS_ID" == "centos" ] || [ "$OS_ID" == "rhel" ]; then
+        # RHEL/Fedora/CentOS
         echo "检测到 RHEL/Fedora/CentOS (dnf) 系统。"
-        dnf install -y 'dnf-command(copr)'
-        dnf copr enable -y @caddy/caddy
-        dnf install -y caddy
+        # 按照官方文档步骤安装
+        if [ "$OS_ID" == "fedora" ]; then
+            sudo dnf install -y dnf5-plugins
+        else
+            sudo dnf install -y dnf-plugins-core
+        fi
+        sudo dnf copr enable -y @caddy/caddy
+        sudo dnf install -y caddy
         
     else
         echo -e "${RED}不支持的操作系统: $OS_ID。请手动安装 Caddy。${NC}"
         exit 1
     fi
     
-    echo -e "${GREEN}Caddy 安装完成。${NC}"
+    # 确保服务已启用
+    echo -e "${GREEN}正在启用 Caddy 服务...${NC}"
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now caddy
+    
+    # 验证安装
+    if systemctl is-active --quiet caddy; then
+        echo -e "${GREEN}Caddy 安装完成并已成功启动。${NC}"
+    else
+        echo -e "${RED}Caddy 安装完成但启动失败。请检查日志。${NC}"
+        echo "您可以使用 'systemctl status caddy' 或 'journalctl -u caddy -f' 查看日志。"
+    fi
+    
     configure_caddy
 }
 
@@ -149,14 +183,14 @@ EOF
     
     # 写入配置文件
     echo -e "${GREEN}正在写入 Caddyfile...${NC}"
-    mkdir -p /etc/caddy
-    echo "$CADDYFILE_CONTENT" > /etc/caddy/Caddyfile
+    sudo mkdir -p /etc/caddy
+    echo "$CADDYFILE_CONTENT" | sudo tee /etc/caddy/Caddyfile > /dev/null
     
     # 重启 Caddy
     echo -e "${GREEN}正在(重)启动 Caddy 服务...${NC}"
-    systemctl daemon-reload
-    systemctl enable caddy
-    systemctl restart caddy
+    sudo systemctl daemon-reload
+    sudo systemctl enable caddy
+    sudo systemctl restart caddy
     
     echo -e "${GREEN}Caddy 配置完成。${NC}"
     echo "请稍等片刻，Caddy 正在后台申请 SSL 证书。"
@@ -167,30 +201,31 @@ EOF
 uninstall_caddy() {
     echo -e "${YELLOW}正在停止并卸载 Caddy...${NC}"
     
-    systemctl stop caddy
-    systemctl disable caddy
+    # 停止并禁用服务
+    sudo systemctl stop caddy
+    sudo systemctl disable caddy
     
     detect_os
 
-    if [ "$OS_ID" == "ubuntu" ] || [ "$OS_ID" == "debian" ]; then
-        # Debian/Ubuntu
-        apt purge -y caddy
-        rm -f /etc/apt/sources.list.d/caddy-stable.list
-        rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-        apt update
+    if [ "$OS_ID" == "ubuntu" ] || [ "$OS_ID" == "debian" ] || [ "$OS_ID" == "raspbian" ]; then
+        # Debian/Ubuntu/Raspbian
+        sudo apt purge -y caddy
+        sudo rm -f /etc/apt/sources.list.d/caddy-stable.list
+        sudo rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        sudo apt update
         
-    elif [ "$OS_ID" == "fedora" ] || [ "$OS_ID" == "centos" ] || [ "$OS_ID" == "rhel" ] || [ "$OS_ID" == "rocky" ] || [ "$OS_ID" == "almalinux" ]; then
-        # RHEL/Fedora
-        dnf remove -y caddy
-        dnf copr disable -y @caddy/caddy
+    elif [ "$OS_ID" == "fedora" ] || [ "$OS_ID" == "centos" ] || [ "$OS_ID" == "rhel" ]; then
+        # RHEL/Fedora/CentOS
+        sudo dnf remove -y caddy
+        sudo dnf copr disable -y @caddy/caddy
         
     else
         echo -e "${YELLOW}无法自动卸载 $OS_ID 的 Caddy 仓库，但 Caddy 软件包可能已被移除。${NC}"
     fi
     
     # 清理配置文件
-    rm -f /etc/caddy/Caddyfile
-    rm -f /etc/caddy/Caddyfile.autosave
+    sudo rm -f /etc/caddy/Caddyfile
+    sudo rm -f /etc/caddy/Caddyfile.autosave
     echo -e "${GREEN}Caddy 已卸载，配置文件 /etc/caddy/Caddyfile 已移除。${NC}"
 }
 
