@@ -337,10 +337,6 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
   REALITY_DEST="www.shinnku.com:443"
   REALITY_SNI_JSON='["www.shinnku.com"]'
 
-  # 默认生成 shortId
-  SHORTID="$(openssl rand -hex 8)"
-  SHORTID_JSON="[\"$SHORTID\"]"
-  info "自动生成 Xray shortId: $SHORTID"
 
   info "写入 Xray 配置到: $XRAY_CONF_PATH"
   cat > "$XRAY_CONF_PATH" <<JSON
@@ -367,7 +363,7 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
           "dest": "${REALITY_DEST}",
           "serverNames": ${REALITY_SNI_JSON},
           "privateKey": "${XRAY_PRIV}",
-          "shortIds": ${SHORTID_JSON}
+          "shortIds": ""
         }
       },
       "sniffing": {
@@ -456,7 +452,7 @@ if [[ "$INSTALL_HY2" == "true" ]]; then
   HY_OBFS_PASS=""
   if [[ "${_ob,,}" =~ ^y(es)?$ ]]; then
     HY_OBFS=true
-    HY_OBFS_PASS="$(rand_hex 16)"
+    HY_OBFS_PASS="$(rand_hex 8)"
     info "已为 obfs 生成密码: $HY_OBFS_PASS"
   fi
 
@@ -670,7 +666,6 @@ after_exit(){
       echo "VLESS 连接要点："
       echo "  - UUID: ${VLESS_UUID}"
       echo "  - X25519 public: ${XRAY_PUB}"
-      echo "  - shortId: ${SHORTID}"
       echo
     fi
 
