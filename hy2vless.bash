@@ -558,15 +558,12 @@ depend() {
 EOF
     chmod +x /etc/init.d/hysteria
     rc-update add hysteria default || true
-    rc-service hysteria start || warn "尝试启动 hysteria 服务失败，请手动检查。"
+    rc-service hysteria restart || warn "尝试启动 hysteria 服务失败，请手动检查。"
   else
     # 如果可用，尝试启用 systemd
     if command -v systemctl >/dev/null 2>&1; then
-      if systemctl list-unit-files | grep -qi hysteria-server; then
-        systemctl daemon-reload || true
-        systemctl enable hysteria-server.service || true
-        systemctl restart hysteria-server.service || warn "无法自动重启 hysteria-server，请手动检查 systemctl status hysteria-server.service"
-      fi
+      systemctl enable hysteria-server.service || true
+      systemctl restart hysteria-server.service || warn "无法自动重启 hysteria-server，请手动检查 systemctl status hysteria-server.service"
     fi
   fi
 fi
