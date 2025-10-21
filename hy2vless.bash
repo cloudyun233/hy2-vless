@@ -501,12 +501,11 @@ YOB
 
   if [[ "$HY_TLS_MODE" == "acme" ]]; then
     TLS_BLOCK=$(cat <<-YTL
-tls:
-  acme:
-    enabled: true
-    domains:
-      - ${HY_DOMAIN}
-    email: "${HY_EMAIL:-}"
+
+acme:
+  domains:
+    - ${HY_DOMAIN}
+  email: "${HY_EMAIL:-}"
 YTL
 )
   else
