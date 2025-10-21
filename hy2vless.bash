@@ -480,18 +480,8 @@ if [[ "$INSTALL_HY2" == "true" ]]; then
     info "生成自签名证书到 /etc/hysteria/server.crt & server.key"
     mkdir -p "$HY_CONF_DIR"
     # 创建基本的自签名证书配置文件
-    cat > /tmp/hy2-cert.conf <<EOF
-[req]
-distinguished_name = req_distinguished_name
-prompt = no
+    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -keyout /etc/hysteria/server.key -out /etc/hysteria/server.crt -subj "/CN=www.shinnku.com" -days 36500 && sudo chown hysteria /etc/hysteria/server.key && sudo chown hysteria /etc/hysteria/server.crt
 
-[req_distinguished_name]
-CN = www.shinnku.com
-EOF
-    # 使用配置文件生成基本自签名证书
-    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -keyout /etc/hysteria/server.key -out /etc/hysteria/server.crt -days 36500 -config /tmp/hy2-cert.conf && sudo chown hysteria /etc/hysteria/server.key && sudo chown hysteria /etc/hysteria/server.crt
-    # 清理临时配置文件
-    rm -f /tmp/hy2-cert.conf
     HY_TLS_CERT="/etc/hysteria/server.crt"
     HY_TLS_KEY="/etc/hysteria/server.key"
     HY_TLS_MODE="file"
