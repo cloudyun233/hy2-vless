@@ -159,10 +159,10 @@ EOF
     https_port 8443
 }
 
-# # 80 端口用于 ACME 验证和重定向
-# $DOMAIN:80 {
-#     redir https://$DOMAIN:8443{uri}
-# }
+# 80 端口用于 ACME 验证和重定向
+$DOMAIN:80 {
+    redir https://$DOMAIN:8443{uri}
+}
 
 # 8443 端口处理 HTTPS
 $DOMAIN:8443 {
