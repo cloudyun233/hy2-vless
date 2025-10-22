@@ -357,7 +357,12 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
             "flow": "xtls-rprx-vision"
           }
         ],
-        "decryption": "none"
+        "decryption": "none",
+        "fallbacks": [
+          {
+            "dest": 8443
+          }
+        ]
       },
       "streamSettings": {
         "network": "tcp",
