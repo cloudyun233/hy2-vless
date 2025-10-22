@@ -136,6 +136,9 @@ setup_environment
 # 配置变量和辅助函数
 ###############################################################################
 
+# 全局变量 - 目标域名
+TARGET_DOMAIN="www.shinnku.com"
+
 # 默认值
 XRAY_PORT_TCP=443
 HY2_PORT_UDP=443
@@ -334,8 +337,8 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
   fi
 
   # 固定 REALITY dest / serverNames
-  REALITY_DEST="www.shinnku.com:443"
-  REALITY_SNI_JSON='["www.shinnku.com"]'
+  REALITY_DEST="${TARGET_DOMAIN}:443"
+  REALITY_SNI_JSON='["${TARGET_DOMAIN}"]'
 
 
   info "写入 Xray 配置到: $XRAY_CONF_PATH"
@@ -476,7 +479,7 @@ if [[ "$INSTALL_HY2" == "true" ]]; then
     info "生成自签名证书到 /etc/hysteria/server.crt & server.key"
     mkdir -p "$HY_CONF_DIR"
     # 创建基本的自签名证书配置文件
-    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -keyout /etc/hysteria/server.key -out /etc/hysteria/server.crt -subj "/CN=www.shinnku.com" -days 36500 && sudo chown hysteria /etc/hysteria/server.key && sudo chown hysteria /etc/hysteria/server.crt
+    openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) -keyout /etc/hysteria/server.key -out /etc/hysteria/server.crt -subj "/CN=${TARGET_DOMAIN}" -days 36500 && sudo chown hysteria /etc/hysteria/server.key && sudo chown hysteria /etc/hysteria/server.crt
 
     HY_TLS_CERT="/etc/hysteria/server.crt"
     HY_TLS_KEY="/etc/hysteria/server.key"
@@ -529,7 +532,7 @@ ${OBFS_BLOCK}
 masquerade:
   type: proxy
   proxy:
-    url: https://www.shinnku.com/
+    url: https://${TARGET_DOMAIN}/
     rewriteHost: true
 YAML
 

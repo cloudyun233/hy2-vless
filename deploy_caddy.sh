@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Caddy 部署与管理脚本
-# 目标：反向代理 https://www.shinnku.com
+# 目标：反向代理 https://${TARGET_DOMAIN}
 # 功能：包管理器安装、交互式配置端口和域名、禁用HTTP3、卸载
 # 支持系统：Debian, Ubuntu, Raspbian, Fedora, RedHat, CentOS
 
@@ -10,6 +10,9 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
+
+# --- 全局变量 ---
+TARGET_DOMAIN="www.shinnku.com"
 
 # --- 检查 Root 权限 ---
 check_root() {
@@ -127,19 +130,15 @@ configure_caddy() {
 
                 CADDYFILE_CONTENT=$(cat <<EOF
 {
-	# 把默认 HTTPS 端口改成 8443，这样 443 不会被监听
-	https_port 8443
+    # 禁用 HTTP/3
+    servers :443 {
+        protocols h1 h2 h2c
+    }
 }
 
-# 80：ACME 验证 + 重定向
-{$DOMAIN}:80 {
-	redir https://{$DOMAIN}:8443{uri}
-}
-
-# 8443：真正的业务端口（HTTP/1.1+HTTP/2）
-{$DOMAIN}:8443 {
-	reverse_proxy https://www.shinnku.com {
-		header_up Host "www.shinnku.com"
+{$DOMAIN} {
+	reverse_proxy https://${TARGET_DOMAIN} {
+		header_up Host "${TARGET_DOMAIN}"
 	}
 }
 EOF
@@ -153,22 +152,19 @@ EOF
 
                 CADDYFILE_CONTENT=$(cat <<EOF
 {
+    # 只启用 HTTP/3 协议
 	servers :443 {
 		protocols h3
 	}
-    https_port 8443
 }
 
-# 80 端口用于 ACME 验证和重定向
-$DOMAIN:80 {
-    redir https://$DOMAIN:8443{uri}
-}
-
-# 8443 端口处理 HTTPS
-$DOMAIN:8443 {
-    reverse_proxy https://www.shinnku.com {
-        # 必须设置 Host 头部
-        header_up Host "www.shinnku.com"
+{$DOMAIN} {
+    reverse_proxy https://${TARGET_DOMAIN} {
+        header_up Host "${TARGET_DOMAIN}"
+    }
+localhost:8443 {
+    reverse_proxy https://${TARGET_DOMAIN} {
+        header_up Host "${TARGET_DOMAIN}"
     }
 }
 EOF
@@ -235,7 +231,7 @@ main_menu() {
     
     echo "========================================"
     echo " Caddy 简易部署脚本"
-    echo " 目标: 反向代理 https://www.shinnku.com"
+    echo " 目标: 反向代理 https://${TARGET_DOMAIN}"
     echo "========================================"
     echo
     echo "请选择操作:"
