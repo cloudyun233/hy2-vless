@@ -369,7 +369,7 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
         "security": "reality",
         "realitySettings": {
           "dest": "${REALITY_DEST}",
-          "serverNames": [${REALITY_SNI_JSON}],
+          "serverNames": ["${REALITY_SNI_JSON}"],
           "privateKey": "${XRAY_PRIV}",
           "shortIds": ""
         }
