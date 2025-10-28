@@ -338,7 +338,7 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
 
   # 固定 REALITY dest / serverNames
   REALITY_DEST="${TARGET_DOMAIN}:443"
-  REALITY_SNI_JSON='["${TARGET_DOMAIN}"]'
+  REALITY_SNI_JSON="${TARGET_DOMAIN}"
 
 
   info "写入 Xray 配置到: $XRAY_CONF_PATH"
@@ -369,7 +369,7 @@ if [[ "$INSTALL_XRAY" == "true" ]]; then
         "security": "reality",
         "realitySettings": {
           "dest": "${REALITY_DEST}",
-          "serverNames": ${REALITY_SNI_JSON},
+          "serverNames": [${REALITY_SNI_JSON}],
           "privateKey": "${XRAY_PRIV}",
           "shortIds": ""
         }
