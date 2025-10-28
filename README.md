@@ -123,6 +123,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/hea
 - name: 服务器名称
   type: hysteria2
   server: 服务器IP/域名
+  # 在非443端口，建议使用ip连接，并启用端口跳跃
   port: 端口（默认443）
   password: 脚本生成的密码
   skip-cert-verify: true
