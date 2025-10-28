@@ -390,7 +390,6 @@ JSON
   # 尝试启用/重启 xray 服务
   if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -qi xray; then
     systemctl daemon-reload || true
-    systemctl enable --now xray || true
     systemctl restart xray || true
   elif [[ "$PM" == "apk" ]]; then
     # 在 Alpine 上 openrc 可能被 Xray 安装程序使用
