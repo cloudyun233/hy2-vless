@@ -161,6 +161,7 @@ sudo nft add rule ip nat prerouting udp dport 68 redirect to 443
 以下cron任务可用于每天UTC20:00自动重启服务器：
 
 ```
+crontab -e
 0 20 * * * /sbin/reboot
 ```
 
