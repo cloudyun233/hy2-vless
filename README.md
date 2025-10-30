@@ -50,7 +50,7 @@ bash hy2vless.bash
 bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/hy2-vless/refs/heads/main/hy2vless.bash)
 ```
 
-### 4. 安装Caddy反向代理（可选，但是你必须有指向服务器IP的域名。毕竟域名你都没有，你怎么伪装成真实的网站）
+### 4. 安装Caddy反向代理（可选，但是你必须有指向服务器IP的域名。可能同时部署vless和hysteria2比部署caddy伪装更好）
 
 #### 方法1：分步执行（推荐）
 
