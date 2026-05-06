@@ -7,9 +7,9 @@ export FILE_PATH="${FILE_PATH:-${PWD}/.npm/video}"
 export DATA_PATH="${DATA_PATH:-${PWD}/singbox_data}"
 export HY2_PORT="${HY2_PORT:-20164}"
 export HTTP_LISTEN_PORT="${HTTP_LISTEN_PORT:-$HY2_PORT}"
-export TLS_CERT_IP="${TLS_CERT_IP:-51.75.118.151}"
-export HY2_SNI="${HY2_SNI:-$TLS_CERT_IP}"
-export TLS_CERT_CN="${TLS_CERT_CN:-$TLS_CERT_IP}"
+export TLS_CERT_DOMAIN="${TLS_CERT_DOMAIN:-hgamefree.info}"
+export HY2_SNI="${HY2_SNI:-$TLS_CERT_DOMAIN}"
+export TLS_CERT_CN="${TLS_CERT_CN:-$TLS_CERT_DOMAIN}"
 export TLS_CERT_DNS="${TLS_CERT_DNS:-$HY2_SNI}"
 export TLS_CERT_PATH="${TLS_CERT_PATH:-${FILE_PATH}/cert.pem}"
 export TLS_KEY_PATH="${TLS_KEY_PATH:-${FILE_PATH}/private.key}"
@@ -193,10 +193,10 @@ setup_cert_and_config() {
     fi
     local openssl_conf san_entries
     openssl_conf="$(mktemp)"
-    san_entries="IP.1 = ${TLS_CERT_IP}"
-    if [ -n "${TLS_CERT_DNS:-}" ] && [ "$TLS_CERT_DNS" != "$TLS_CERT_IP" ]; then
+    san_entries="DNS.1 = ${TLS_CERT_DOMAIN}"
+    if [ -n "${TLS_CERT_DNS:-}" ] && [ "$TLS_CERT_DNS" != "$TLS_CERT_DOMAIN" ]; then
       san_entries="${san_entries}
-DNS.1 = ${TLS_CERT_DNS}"
+DNS.2 = ${TLS_CERT_DNS}"
     fi
     cat > "$openssl_conf" <<EOF_OPENSSL
 [req]
@@ -229,7 +229,7 @@ subjectAltName = @alt_names
 [alt_names]
 ${san_entries}
 EOF_OPENSSL
-    log "INFO" "生成 ECDSA prime256v1 自签证书：CN=$TLS_CERT_CN SAN=IP:$TLS_CERT_IP DNS:$TLS_CERT_DNS 位置=FR/Hauts-de-France/Roubaix"
+    log "INFO" "生成 ECDSA prime256v1 自签证书：CN=$TLS_CERT_CN SAN=DNS:$TLS_CERT_DOMAIN 位置=FR/Hauts-de-France/Roubaix"
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha256 -nodes -days 365 \
       -keyout "$TLS_KEY_PATH" \
       -out "$TLS_CERT_PATH" \
@@ -251,8 +251,6 @@ EOF_OPENSSL
       "masquerade": "http://127.0.0.1:${HTTP_LISTEN_PORT}",
       "tls": {
         "enabled": true,
-        "server_name": "${HY2_SNI}",
-        "alpn": ["h3"],
         "certificate_path": "${TLS_CERT_PATH}",
         "key_path": "${TLS_KEY_PATH}"
       }
@@ -282,12 +280,12 @@ start_singbox() {
 print_info() {
   section "连接信息"
   printf '\n================== 连接信息 ==================\n'
-  printf '服务器 IP / 证书 IP: %s\n' "$TLS_CERT_IP"
+  printf '证书域名: %s\n' "$TLS_CERT_DOMAIN"
   printf 'HY2 端口: %s/udp\n' "$HY2_PORT"
   printf 'HY2 密码: %s\n' "$UUID"
   printf 'TLS SNI: %s\n' "$HY2_SNI"
   printf '允许不安全证书: true\n'
-  printf 'Web HTTPS: https://%s:%s/\n' "$TLS_CERT_IP" "$HTTP_LISTEN_PORT"
+  printf 'Web HTTPS: https://%s:%s/\n' "$TLS_CERT_DOMAIN" "$HTTP_LISTEN_PORT"
   if [[ -n "${DOWNLOAD_KEY:-}" ]]; then
     printf 'Web 操作密钥 DOWNLOAD_KEY: %s\n' "$DOWNLOAD_KEY"
   else
@@ -331,7 +329,7 @@ schedule_restart_loop() {
 
 main() {
   section "启动 sing-box-only 脚本"
-  log "INFO" "HY2_PORT=$HY2_PORT HTTP_LISTEN_PORT=$HTTP_LISTEN_PORT HY2_SNI=$HY2_SNI TLS_CERT_IP=$TLS_CERT_IP"
+  log "INFO" "HY2_PORT=$HY2_PORT HTTP_LISTEN_PORT=$HTTP_LISTEN_PORT HY2_SNI=$HY2_SNI TLS_CERT_DOMAIN=$TLS_CERT_DOMAIN"
   setup_uuid
   setup_download_key
   install_singbox
