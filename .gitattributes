@@ -1,5 +1,6 @@
 .gitattributes text eol=lf
 *.js text eol=lf
 *.md text eol=lf
+*.bash text eol=lf
 *.sh text eol=lf
 *.mjs text eol=lf
