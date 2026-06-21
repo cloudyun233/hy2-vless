@@ -182,11 +182,11 @@ sudo nft add rule inet nat prerouting udp dport 68 dnat to :443
 
 ### 定时重启任务
 
-以下 cron 任务可用于每天 UTC 20:00 自动重启服务器：
+以下 cron 任务可用于每月 1 日 UTC 20:00 自动重启服务器：
 
 ```
 crontab -e
-0 20 * * * /sbin/reboot
+0 20 1 * * /sbin/reboot
 ```
 
 ### nftables 端口转发

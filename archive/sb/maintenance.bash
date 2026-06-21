@@ -72,7 +72,7 @@ uninstall_singbox(){
     info "已卸载。"
 }
 
-# 配置定时重启任务（每天 20:00 UTC）
+# 配置定时重启任务（每月 1 日 20:00 UTC）
 configure_cron_reboot(){
     info "正在检查并配置系统时间为 UTC..."
 
@@ -97,10 +97,10 @@ configure_cron_reboot(){
     # 显示当前时间
     info "当前系统时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 
-    info "正在配置每天 20:00 UTC 重启。"
+    info "正在配置每月 1 日 20:00 UTC 重启。"
     # 检查是否存在
     crontab -l 2>/dev/null | grep -v "/sbin/reboot" > mycron || true
-    echo "0 20 * * * /sbin/reboot" >> mycron
+    echo "0 20 1 * * /sbin/reboot" >> mycron
     crontab mycron
     rm mycron
     info "定时任务已添加。"
