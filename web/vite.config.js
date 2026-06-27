@@ -9,6 +9,19 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     emptyOutDir: true,
+    target: 'es2020',
+    cssCodeSplit: true,
+    sourcemap: false,
+    minify: 'esbuild',
+    cssMinify: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 500,
   },
   server: {
     proxy: {

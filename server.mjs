@@ -23,6 +23,7 @@ const seedMaxRatio = Number(process.env.SEED_MAX_RATIO || 0) || 0;
 const trackerListUrl = process.env.TRACKER_LIST_URL || 'https://cf.trackerslist.com/all.txt';
 const trackerCacheFile = process.env.TRACKER_LIST_CACHE_FILE || path.join(fileRoot, 'trackers_all.txt');
 const visitorFile = path.join(fileRoot, 'weekly_visitors.json');
+const trustProxy = String(process.env.TRUST_PROXY || '').toLowerCase() === 'true' || process.env.TRUST_PROXY === '1';
 const videoExts = new Set(['.mp4', '.m4v', '.webm', '.mkv', '.mov', '.avi', '.ts', '.m3u8']);
 const skipDirs = new Set(['http_runtime', 'nginx_www', 'node_modules', '.git', '.cache', '.singbox_tmp']);
 const mime = {
@@ -40,13 +41,17 @@ function loadDownloadKey() {
   if (process.env.DOWNLOAD_KEY) return process.env.DOWNLOAD_KEY;
   try {
     const key = fs.readFileSync(downloadKeyFile, 'utf8').trim();
-    if (key) return key;
+    if (key) {
+      try { fs.chmodSync(downloadKeyFile, 0o600); } catch {}
+      return key;
+    }
   } catch {
     // Generate below when the key file does not exist yet.
   }
   const key = crypto.randomUUID();
   fs.mkdirSync(fileRoot, { recursive: true });
   fs.writeFileSync(downloadKeyFile, `${key}\n`, { mode: 0o600 });
+  try { fs.chmodSync(downloadKeyFile, 0o600); } catch {}
   return key;
 }
 const staticMime = {
@@ -229,6 +234,17 @@ const seedingTorrents = new Map();
 const addedAt = new Map();
 const base32Chars = 'abcdefghijklmnopqrstuvwxyz234567';
 
+let filesCache = null;
+let filesCacheMtime = 0;
+let filesCacheCtime = 0;
+const FILES_CACHE_TTL = 8000;
+
+function invalidateFilesCache() {
+  filesCache = null;
+  filesCacheMtime = 0;
+  filesCacheCtime = 0;
+}
+
 function base32ToHex(value) {
   let bits = '';
   let hex = '';
@@ -256,6 +272,16 @@ function magnetId(magnet) {
   return match?.[1] ? normId(match[1]) : crypto.createHash('sha1').update(String(magnet || '')).digest('hex');
 }
 
+function magnetName(magnet) {
+  const match = /(?:^|[?&])dn=([^&]+)/i.exec(String(magnet || ''));
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 function liveTorrents() {
   return client ? client.torrents.filter((torrent) => torrent && !torrent.destroyed && !torrent.done) : [];
 }
@@ -278,22 +304,34 @@ function torrentView(torrent) {
   const seedUploaded = seed ? Number(torrent.uploaded || 0) - seed.uploadedAtStart : 0;
   const seedTime = seed ? Math.round((Date.now() - seed.startedAt) / 1000) : 0;
   const ratio = (downloaded || 1) ? (seedUploaded / (downloaded || 1)) : 0;
+  const peers = torrent.numPeers || 0;
+  const isMetadataMissing = !torrent.name || (!length && !torrent.done);
+  const health = peers >= 5 ? 'good' : peers >= 1 ? 'fair' : 'poor';
+
+  let stateText = '';
+  if (isSeeding) stateText = '做种中';
+  else if (torrent.done) stateText = '已完成';
+  else if (isMetadataMissing) stateText = '获取元数据中...';
+  else if (peers === 0 && downloadSpeed === 0) stateText = '等待连接节点...';
+  else stateText = '下载中';
 
   return {
     id,
     infoHash: id,
     name: torrent.name || `下载任务 ${id.slice(0, 8)}`,
     state: isSeeding ? 'seeding' : torrent.done ? 'done' : 'downloading',
+    stateText,
+    health,
     progress: Number.isFinite(torrent.progress) ? Math.round(torrent.progress * 1000) / 10 : 0,
     downloaded,
     length,
     downloadSpeed,
     uploadSpeed: Number(torrent.uploadSpeed || 0),
     downloadedText: human(downloaded),
-    lengthText: length ? human(length) : '获取元数据中',
-    downloadSpeedText: `${human(downloadSpeed)}/s`,
+    lengthText: length ? human(length) : (isMetadataMissing ? '获取元数据中' : '计算中'),
+    downloadSpeedText: downloadSpeed > 0 ? `${human(downloadSpeed)}/s` : (isMetadataMissing ? '连接中' : '0 B/s'),
     uploadSpeedText: `${human(torrent.uploadSpeed || 0)}/s`,
-    peers: torrent.numPeers || 0,
+    peers,
     addedAt: addedAt.get(id) || Date.now(),
     error: '',
     seedUploaded,
@@ -304,34 +342,58 @@ function torrentView(torrent) {
       : `${Math.floor(seedTime / 60)}m${seedTime % 60}s`,
     ratio: Number.isFinite(ratio) ? ratio : 0,
     ratioText: ratio >= 1 ? ratio.toFixed(2) : ratio.toFixed(3),
+    canRetry: false,
   };
 }
 
-function queuedView(item) {
+function queuedView(item, index) {
   return {
     id: item.id,
     infoHash: item.id,
-    name: item.name || `排队任务 ${item.id.slice(0, 8)}`,
+    name: item.name || magnetName(item.magnet) || `排队任务 ${item.id.slice(0, 8)}`,
     state: 'queued',
+    stateText: `队列中（第 ${index + 1} 位）`,
+    health: 'queued',
     progress: 0,
     downloaded: 0,
     length: 0,
     downloadSpeed: 0,
     downloadedText: '0 B',
-    lengthText: '等待中',
-    downloadSpeedText: '排队中',
+    lengthText: '等待下载',
+    downloadSpeedText: '排队等待中',
     peers: 0,
     addedAt: item.addedAt,
     error: '',
+    queuePosition: index + 1,
+    canRetry: false,
   };
 }
 
 function failedView([id, error]) {
+  const errMsg = String(error.error || '未知错误');
+  let friendlyError = errMsg;
+  let canRetry = true;
+  if (/timeout|timed out/i.test(errMsg)) {
+    friendlyError = '连接超时，请检查网络后重试';
+  } else if (/tracker/i.test(errMsg)) {
+    friendlyError = 'Tracker服务器连接失败，可尝试重试';
+  } else if (/invalid|infohash|hash/i.test(errMsg)) {
+    friendlyError = '无效的磁力链接或信息哈希';
+    canRetry = false;
+  } else if (/enospc|space|disk/i.test(errMsg)) {
+    friendlyError = '磁盘空间不足';
+    canRetry = false;
+  } else if (/permission|eacces/i.test(errMsg)) {
+    friendlyError = '文件写入权限不足';
+    canRetry = false;
+  }
   return {
     id,
     infoHash: id,
-    name: `失败任务 ${id.slice(0, 8)}`,
+    name: magnetName(error.magnet) || `失败任务 ${id.slice(0, 8)}`,
     state: 'failed',
+    stateText: '下载失败',
+    health: 'error',
     progress: 0,
     downloaded: 0,
     length: 0,
@@ -341,7 +403,9 @@ function failedView([id, error]) {
     downloadSpeedText: '—',
     peers: 0,
     addedAt: error.addedAt,
-    error: error.error,
+    error: friendlyError,
+    rawError: errMsg,
+    canRetry,
   };
 }
 
@@ -357,9 +421,7 @@ function startQueue() {
       log('[Queue] starting queued task', item.id, 'remaining=', queued.length);
       startMagnet(item.magnet, item.id, item.addedAt);
     } catch (error) {
-      // 队列项已经移出 queued，启动失败时必须保留为 failed，
-      // 否则用户看到的排队任务会“凭空消失”。
-      failed.set(item.id, { error: error?.message || String(error), addedAt: item.addedAt || Date.now() });
+      failed.set(item.id, { error: error?.message || String(error), addedAt: item.addedAt || Date.now(), magnet: item.magnet });
       log('[Queue] failed to start queued task', item.id, error?.message || error);
     }
   }
@@ -384,12 +446,13 @@ function attachTorrent(torrent, id, at) {
     const hash = remember();
     log('[Torrent] done', hash, 'name=', torrent.name || '', 'downloaded=', torrent.downloaded || 0);
     addedAt.delete(hash);
+    invalidateFilesCache();
     startSeeding(hash, torrent);
     startQueue();
   });
   torrent.once('error', (error) => {
     const hash = normId(torrent.infoHash || id);
-    failed.set(hash, { error: error?.message || String(error), addedAt: Date.now() });
+    failed.set(hash, { error: error?.message || String(error), addedAt: Date.now(), magnet: torrent.magnetURI || '' });
     log('[Torrent] error', hash, error?.message || error);
     try {
       client.remove(torrent, { destroyStore: false }, () => {});
@@ -491,7 +554,7 @@ function activeVideoRels() {
   return blocked;
 }
 
-async function walk(dir = fileRoot, depth = 0, blocked = activeVideoRels()) {
+async function walk(dir, depth, blocked) {
   if (depth > 6) return [];
   let entries = [];
   try {
@@ -527,6 +590,24 @@ async function walk(dir = fileRoot, depth = 0, blocked = activeVideoRels()) {
     }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }));
+}
+
+async function getFiles(force = false) {
+  try {
+    const rootStat = await fsp.stat(fileRoot);
+    const now = Date.now();
+    if (!force && filesCache && (now - filesCacheCtime) < FILES_CACHE_TTL && rootStat.mtimeMs === filesCacheMtime) {
+      return filesCache;
+    }
+    const blocked = activeVideoRels();
+    const result = await walk(fileRoot, 0, blocked);
+    filesCache = result;
+    filesCacheMtime = rootStat.mtimeMs;
+    filesCacheCtime = now;
+    return result;
+  } catch {
+    return filesCache || [];
+  }
 }
 
 async function dirBytes(dir = fileRoot, depth = 0) {
@@ -583,11 +664,11 @@ function thumb(name) {
 }
 
 async function status() {
-  const files = await walk();
+  const files = await getFiles();
   const spaceInfo = await space();
   const torrents = [
     ...allTorrents().map(torrentView),
-    ...queued.map(queuedView),
+    ...queued.map((item, idx) => queuedView(item, idx)),
     ...failed.entries(),
   ].map((item) => (Array.isArray(item) ? failedView(item) : item)).sort((a, b) => b.addedAt - a.addedAt);
   const totalDownloadSpeed = torrents.reduce((sum, item) => sum + Number(item.downloadSpeed || 0), 0);
@@ -628,7 +709,7 @@ async function status() {
 }
 
 async function addMagnet(req, res) {
-  if (!client) return sendJson(res, 503, { ok: false, error: `下载器不可用：${loadErr}` });
+  if (!client) return sendJson(res, 503, { ok: false, error: '下载器不可用' });
   if (!authorized(req)) return sendJson(res, 401, { ok: false, error: '访问密钥错误' });
   let data;
   try {
@@ -637,7 +718,7 @@ async function addMagnet(req, res) {
     return sendJson(res, 400, { ok: false, error: '请求格式无效' });
   }
   const magnet = String(data.magnet || '').trim();
-  if (!magnet.startsWith('magnet:?') || !/xt=urn:btih:/i.test(magnet)) {
+  if (!magnet.toLowerCase().startsWith('magnet:?') || !/xt=urn:btih:/i.test(magnet)) {
     return sendJson(res, 400, { ok: false, error: '请输入有效磁力链接' });
   }
   const id = magnetId(magnet);
@@ -659,7 +740,7 @@ async function addMagnet(req, res) {
     try {
       return sendJson(res, 202, { ok: true, torrent: torrentView(startMagnet(magnet, id, at)) });
     } catch (error) {
-      failed.set(id, { error: error?.message || String(error), addedAt: at });
+      failed.set(id, { error: error?.message || String(error), addedAt: at, magnet });
       log('[Download] start failed', id, error?.message || error);
       return sendJson(res, 500, { ok: false, error: error?.message || String(error) });
     }
@@ -669,7 +750,7 @@ async function addMagnet(req, res) {
     log('[Queue] rejected full', id, 'maxQueued=', maxQueued);
     return sendJson(res, 429, { ok: false, error: `队列已满：最多 ${maxQueued} 个等待任务` });
   }
-  const item = { id, magnet, addedAt: at, name: `排队任务 ${id.slice(0, 8)}` };
+  const item = { id, magnet, addedAt: at, name: magnetName(magnet) || `排队任务 ${id.slice(0, 8)}` };
   queued.push(item);
   log('[Queue] queued task', id, 'size=', queued.length);
   return sendJson(res, 202, { ok: true, torrent: queuedView(item) });
@@ -707,6 +788,38 @@ async function delTask(req, res, id) {
   }
 }
 
+async function retryTask(req, res, id) {
+  if (!client) return sendJson(res, 503, { ok: false, error: '下载器不可用' });
+  if (!authorized(req)) return sendJson(res, 401, { ok: false, error: '访问密钥错误' });
+  const failedItem = failed.get(id);
+  if (!failedItem) {
+    const existing = findTorrent(id);
+    if (existing) return sendJson(res, 202, { ok: true, torrent: torrentView(existing) });
+    return sendJson(res, 404, { ok: false, error: '未找到失败任务' });
+  }
+  const magnet = failedItem.magnet;
+  if (!magnet) {
+    return sendJson(res, 400, { ok: false, error: '无法重试：缺少原始磁力链接' });
+  }
+  failed.delete(id);
+  const at = Date.now();
+  log('[Download] retry task', id);
+  if (activeCount() < maxActive) {
+    try {
+      return sendJson(res, 202, { ok: true, torrent: torrentView(startMagnet(magnet, id, at)) });
+    } catch (error) {
+      failed.set(id, { error: error?.message || String(error), addedAt: at, magnet });
+      return sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+  if (queued.length >= maxQueued) {
+    return sendJson(res, 429, { ok: false, error: `队列已满：最多 ${maxQueued} 个等待任务` });
+  }
+  const item = { id, magnet, addedAt: at, name: magnetName(magnet) || `排队任务 ${id.slice(0, 8)}` };
+  queued.push(item);
+  return sendJson(res, 202, { ok: true, torrent: queuedView(item, queued.length - 1) });
+}
+
 async function delFile(req, res, id) {
   if (!authorized(req)) return sendJson(res, 401, { ok: false, error: '访问密钥错误' });
   const rel = relFromId(id);
@@ -719,6 +832,7 @@ async function delFile(req, res, id) {
     const stat = await fsp.stat(full);
     if (!stat.isFile()) throw new Error('不是文件');
     await fsp.unlink(full);
+    invalidateFilesCache();
     log('[Library] delete file', rel, 'size=', stat.size);
     return sendJson(res, 200, { ok: true });
   } catch (error) {
@@ -747,7 +861,7 @@ function serveThumb(req, res, id) {
 function serveMedia(req, res, id) {
   const rel = relFromId(id);
   const full = path.resolve(fileRoot, rel);
-  if (!inside(fileRoot, full)) return sendText(res, 403, 'Forbidden');
+  if (!inside(fileRoot, full) || !videoExts.has(path.extname(full).toLowerCase())) return sendText(res, 403, 'Forbidden');
   fs.stat(full, (error, stat) => {
     if (error || !stat.isFile()) return sendText(res, 404, 'Not Found');
     const type = mime[path.extname(full).toLowerCase()] || 'application/octet-stream';
@@ -844,6 +958,10 @@ const server = (tlsOptions ? https : http).createServer(tlsOptions || undefined,
     if (req.method === 'POST' && pathname === '/api/downloads') return addMagnet(req, res);
     if (req.method === 'DELETE' && pathname.startsWith('/api/downloads/')) {
       return delTask(req, res, decodeURIComponent(pathname.slice('/api/downloads/'.length)));
+    }
+    if (req.method === 'POST' && pathname.startsWith('/api/downloads/') && pathname.endsWith('/retry')) {
+      const retryId = decodeURIComponent(pathname.slice('/api/downloads/'.length, -'/retry'.length));
+      return retryTask(req, res, retryId);
     }
     if (req.method === 'POST' && pathname.startsWith('/api/seed/stop/')) {
       if (!authorized(req)) return sendJson(res, 401, { ok: false, error: '访问密钥错误' });

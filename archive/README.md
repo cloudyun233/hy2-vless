@@ -16,10 +16,9 @@
 
 ## 简介
 
-本项目包含三个脚本，用于在Linux服务器上快速部署代理服务：
+本项目包含两个脚本，用于在Linux服务器上快速部署代理服务：
 1. **official.bash** - Xray (VLESS+XTLS+REALITY) 和 Hysteria2 一键安装/卸载脚本
-2. **candy.sh** - Caddy 反向代理服务器部署脚本
-3. **sb.bash** - Sing-box 一键配置脚本，支持 VLESS Reality、Hysteria2、TUIC v5 协议
+2. **sb.bash** - Sing-box 一键配置脚本，支持 VLESS Reality、Hysteria2、TUIC v5 协议
 
 ## 系统要求
 
@@ -59,16 +58,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs
 - 4) 删除 Hysteria2
 - 5) IP 质量检测
 
----
-
-### 3. Caddy 反向代理（可选）
-
-需要已解析到服务器 IP 的域名。
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs/heads/main/archive/candy.sh)
-```
-
 ## 配置信息
 
 ### Xray (VLESS+XTLS+REALITY)
@@ -90,9 +79,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs
 - **安装目录**: `/usr/local/etc/sing-box/`
 - **支持协议**: VLESS Reality, Hysteria2, TUIC v5
 
-### Caddy 反向代理
-
-- **配置文件**: `/etc/caddy/Caddyfile`
+> **注意**：`sb.bash` 与 `hy2_fakeweb.sh` 各自下载 sing-box 到不同路径（前者 `/usr/local/bin/sing-box`，后者 `${FILE_PATH}/sing-box`），建议二选一使用，避免重复占用磁盘。
 
 ---
 
@@ -189,6 +176,10 @@ crontab -e
 0 20 1 * * /sbin/reboot
 ```
 
+### hy2_fakeweb.sh 每日自动重启
+
+`hy2_fakeweb.sh` 启动后每天 04:00（北京时间）自动重启 sing-box，期间连接会短暂中断。
+
 ### nftables 端口转发
 
 要启用 nftables 服务并配置端口转发，请执行以下命令：
@@ -226,7 +217,6 @@ sudo systemctl restart nftables
   - [Xray-project](https://github.com/XTLS/Xray-core) - 提供 Xray 核心
   - [Hysteria](https://github.com/apernet/hysteria) - 提供 Hysteria2 协议实现
   - [Sing-box](https://github.com/SagerNet/sing-box) - 提供多协议代理支持
-  - [Caddy](https://github.com/caddyserver/caddy) - 提供反向代理功能
   - [IPQuality](https://github.com/xykt/IPQuality) - 提供 IP 质量检测服务
 
 ## 贡献

@@ -38,6 +38,8 @@ dist/
 /home/container/dist/index.html
 ```
 
+首次启动时 `index.js` 会自动执行 `npm install` 安装 webtorrent 运行时依赖，需要服务器联网。离线部署请提前在 `${HTTP_RUNTIME_DIR:-.npm/video/http_runtime}` 目录准备好 `node_modules/webtorrent`。
+
 ### 3. 设置启动命令
 
 面板 Startup Command 填：
@@ -72,6 +74,18 @@ Web 操作密钥默认开启。首次启动会自动生成并持久化到 `.npm/
 - `TLS_CERT_CN` - 证书 CN 名称（默认同 TLS_CERT_IP）
 - `TLS_CERT_DNS` - 证书 DNS 名称（默认同 HY2_SNI）
 - `TLS_EARLY_RENEW_DAYS` - 提前多少天续期（默认 30）
+- `FILE_PATH` - 数据根目录，存放密钥、证书、下载文件、缓存等（默认 `.npm/video`）
+- `DOWNLOAD_DIR` - 下载目录（默认 `${FILE_PATH}/downloads`）
+- `FRONTEND_DIST_DIR` - 前端产物目录（默认 `./dist`）
+- `TLS_CERT_PATH` - 证书文件路径（默认 `${FILE_PATH}/cert.pem`）
+- `TLS_KEY_PATH` - 私钥文件路径（默认 `${FILE_PATH}/private.key`）
+- `DOWNLOAD_MAX_CONNS` - 单任务最大连接数（默认 32，最小 12）
+- `SEED_UPLOAD_LIMIT` - 做种上传速率上限（默认 500*1024，0 表示不限）
+- `SEED_MAX_TIME` - 做种最大时长，单位小时（默认 0，表示不限）
+- `SEED_MAX_RATIO` - 做种最大分享率（默认 0，表示不限）
+- `TRACKER_LIST_URL` - tracker 列表拉取地址（默认 `https://cf.trackerslist.com/all.txt`）
+- `TRACKER_LIST_CACHE_FILE` - tracker 列表缓存文件（默认 `${FILE_PATH}/trackers_all.txt`）
+- `TRUST_PROXY` - 是否信任 `X-Forwarded-For` 头（默认 `false`，仅在反向代理后开启）
 
 ### 5. 访问页面
 

@@ -13,6 +13,7 @@ export TLS_CERT_CN="${TLS_CERT_CN:-$TLS_CERT_DOMAIN}"
 export TLS_CERT_DNS="${TLS_CERT_DNS:-$HY2_SNI}"
 export TLS_CERT_PATH="${TLS_CERT_PATH:-${FILE_PATH}/cert.pem}"
 export TLS_KEY_PATH="${TLS_KEY_PATH:-${FILE_PATH}/private.key}"
+export TLS_CERT_IP="${TLS_CERT_IP:-}"
 export SINGBOX_BIN="${SINGBOX_BIN:-${FILE_PATH}/sing-box}"
 export SINGBOX_AUTO_UPDATE="${SINGBOX_AUTO_UPDATE:-1}"
 export SINGBOX_MIN_FREE_MB="${SINGBOX_MIN_FREE_MB:-120}"
@@ -198,6 +199,10 @@ setup_cert_and_config() {
       san_entries="${san_entries}
 DNS.2 = ${TLS_CERT_DNS}"
     fi
+    if [ -n "${TLS_CERT_IP:-}" ]; then
+      san_entries="${san_entries}
+IP.1 = ${TLS_CERT_IP}"
+    fi
     cat > "$openssl_conf" <<EOF_OPENSSL
 [req]
 default_bits = 2048
@@ -229,11 +234,11 @@ subjectAltName = @alt_names
 [alt_names]
 ${san_entries}
 EOF_OPENSSL
-    log "INFO" "生成 ECDSA prime256v1 自签证书：CN=$TLS_CERT_CN SAN=DNS:$TLS_CERT_DOMAIN 位置=FR/Hauts-de-France/Roubaix"
+    log "INFO" "生成 ECDSA prime256v1 自签证书：CN=$TLS_CERT_CN SAN=DNS:$TLS_CERT_DOMAIN${TLS_CERT_IP:+,IP:$TLS_CERT_IP} 位置=FR/Hauts-de-France/Roubaix"
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha256 -nodes -days 365 \
       -keyout "$TLS_KEY_PATH" \
       -out "$TLS_CERT_PATH" \
-      -config "$openssl_conf"
+      -config "$openssl_conf" || { rm -f "$openssl_conf"; log "ERROR" "TLS 证书生成失败"; exit 1; }
     rm -f "$openssl_conf"
   fi
   chmod 600 "$TLS_KEY_PATH" || true
@@ -248,7 +253,7 @@ EOF_OPENSSL
       "listen": "::",
       "listen_port": ${HY2_PORT},
       "users": [{ "password": "${UUID}" }],
-      "masquerade": "http://127.0.0.1:${HTTP_LISTEN_PORT}",
+      "masquerade": { "type": "proxy", "url": "http://127.0.0.1:${HTTP_LISTEN_PORT}", "rewrite_host": true },
       "tls": {
         "enabled": true,
         "certificate_path": "${TLS_CERT_PATH}",
@@ -266,6 +271,12 @@ SINGBOX_PID=""
 
 start_singbox() {
   section "启动 sing-box / HY2"
+  if "$SINGBOX_BIN" check -c "$FILE_PATH/config.json" 2>/dev/null; then
+    log "INFO" "sing-box 配置校验通过"
+  else
+    log "ERROR" "sing-box 配置校验失败"
+    exit 1
+  fi
   "$SINGBOX_BIN" run -c "$FILE_PATH/config.json" &
   SINGBOX_PID=$!
   export SINGBOX_PID

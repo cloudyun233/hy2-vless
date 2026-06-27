@@ -39,13 +39,12 @@ function run(command, args, options = {}) {
 }
 
 function ensureWebTorrentRuntime() {
-  if (fs.existsSync(path.join(runtimeDir, 'node_modules', 'webtorrent'))
-      && fs.existsSync(path.join(runtimeDir, 'node_modules', 'express'))) {
+  if (fs.existsSync(path.join(runtimeDir, 'node_modules', 'webtorrent'))) {
     log('reuse runtime packages');
     return;
   }
 
-  log('install runtime packages (webtorrent, express)');
+  log('install runtime packages (webtorrent)');
   fs.writeFileSync(
     path.join(runtimeDir, 'package.json'),
     JSON.stringify({
@@ -53,11 +52,15 @@ function ensureWebTorrentRuntime() {
       private: true,
       dependencies: {
         webtorrent: 'latest',
-        express: '^5.1.0',
       },
     }, null, 2),
   );
-  run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--omit=dev'], { cwd: runtimeDir });
+  try {
+    run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--omit=dev'], { cwd: runtimeDir });
+  } catch (error) {
+    log(`WebTorrent 运行时安装失败。请检查网络连接，或离线部署时手动执行：cd "${runtimeDir}" && npm install webtorrent`);
+    throw error;
+  }
 }
 
 function ensureDownloadKey() {

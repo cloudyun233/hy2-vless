@@ -1,223 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import TopBar from './components/layout/TopBar';
+import HeroPanel from './components/hero/HeroPanel';
+import { StatsGrid } from './components/common/StatCard';
+import VideoGrid from './components/video/VideoGrid';
+import TaskList from './components/tasks/TaskList';
+import RecentList from './components/tasks/RecentList';
+import Input from './components/common/Input';
+import Select from './components/common/Select';
+import ConfirmDialog from './components/common/ConfirmDialog';
+import { useToast } from './components/common/Toast';
+import { requestJson } from './utils/api';
+import { readLocal, writeLocal } from './utils/storage';
+import {
+  KEY_STORAGE,
+  RECENT_STORAGE,
+  PROGRESS_STORAGE,
+  fileSignature,
+  sortFiles,
+} from './utils/constants';
 
-const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
-const STATUS_INTERVAL_MS = 5000;
-const KEY_STORAGE = 'moonroom.accessKey';
-const RECENT_STORAGE = 'moonroom.recentFiles';
-const PROGRESS_STORAGE = 'moonroom.playProgress';
-
-function apiPath(path) {
-  return `${API_BASE}${path}`;
-}
-
-function serverAsset(url) {
-  const value = String(url || '');
-  if (!value || /^(https?:)?\/\//i.test(value) || value.startsWith('data:')) return value;
-
-  // 后端返回的 /media 和 /thumb 默认是同域相对地址。
-  // 如果用户把 dist 上传到独立静态站点，可在构建时设置 VITE_API_BASE，
-  // 这里会同步把视频与封面请求指回脚本 API 域名。
-  return `${API_BASE}${value.startsWith('/') ? value : `/${value}`}`;
-}
-
-function readLocal(key, fallback) {
-  try {
-    const value = window.localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeLocal(key, value) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
-}
-
-async function readJson(response) {
-  const text = await response.text();
-  if (!text) return {};
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(text || `HTTP ${response.status}`);
-  }
-}
-
-async function requestJson(path, options = {}) {
-  const response = await fetch(apiPath(path), {
-    cache: 'no-store',
-    ...options,
-  });
-  const data = await readJson(response);
-
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.error || `HTTP ${response.status}`);
-  }
-
-  return data;
-}
-
-function percent(value) {
-  return `${Math.max(0, Math.min(100, Number(value) || 0))}%`;
-}
-
-function fileSignature(files) {
-  return files.map((file) => `${file.id}|${file.size}|${file.mtime}`).join('||');
-}
-
-function taskStateText(state) {
-  return {
-    downloading: '下载中',
-    queued: '排队中',
-    failed: '失败',
-    done: '完成',
-    seeding: '做种中',
-  }[state] || state || '未知';
-}
-
-function progressLabel(saved) {
-  if (!saved?.duration || !saved?.time) return '';
-  return `${Math.round((saved.time / saved.duration) * 100)}%`;
-}
-
-function sortFiles(files, sortMode, recentIds) {
-  const recentRank = new Map(recentIds.map((id, index) => [id, index]));
-  const next = [...files];
-  if (sortMode === 'name') return next.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }));
-  if (sortMode === 'size') return next.sort((a, b) => Number(b.size || 0) - Number(a.size || 0));
-  if (sortMode === 'recent') {
-    return next.sort((a, b) => {
-      const ar = recentRank.has(a.id) ? recentRank.get(a.id) : 9999;
-      const br = recentRank.has(b.id) ? recentRank.get(b.id) : 9999;
-      return ar - br || Number(b.mtimeMs || 0) - Number(a.mtimeMs || 0);
-    });
-  }
-  return next.sort((a, b) => Number(b.mtimeMs || 0) - Number(a.mtimeMs || 0));
-}
-
-function Empty({ children }) {
-  return <div className="empty">{children}</div>;
-}
-
-function Stat({ label, value, detail }) {
-  return (
-    <div className="stat">
-      <span>{label}</span>
-      <b>{value}</b>
-      {detail ? <em>{detail}</em> : null}
-    </div>
-  );
-}
-
-function VideoCard({ file, savedProgress, isRecent, onDelete, onPlayed, onPlaybackChange, onPlaybackError, onProgress }) {
-  const videoRef = useRef(null);
-  const loadedRef = useRef(false);
-
-  const loadMedia = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || loadedRef.current) return video;
-
-    // 关键点：React 首屏只渲染 poster，不渲染 src/source。
-    // 只有用户点击播放按钮或视频控件时才把真实 /media 地址挂到 video 上，
-    // 这样访问页面、刷新任务、查看片库都不会提前触发视频 Range 请求。
-    video.src = serverAsset(file.url);
-    video.load();
-    loadedRef.current = true;
-    return video;
-  }, [file.url]);
-
-  const play = useCallback(async () => {
-    const video = loadMedia();
-    if (!video) return;
-
-    try {
-      await video.play();
-    } catch {
-      onPlaybackError('浏览器无法播放该格式');
-    }
-  }, [loadMedia, onPlaybackError]);
-
-  return (
-    <article className="video-card">
-      <div className="poster-shell">
-        <video
-          ref={videoRef}
-          preload="none"
-          poster={serverAsset(file.thumbUrl)}
-          controls
-          playsInline
-          onLoadedMetadata={(event) => {
-            if (savedProgress?.time && savedProgress.time < event.currentTarget.duration - 8) {
-              event.currentTarget.currentTime = savedProgress.time;
-            }
-          }}
-          onPointerDownCapture={loadMedia}
-          onPlay={() => {
-            loadMedia();
-            onPlayed(file.id);
-            onPlaybackChange(file.id, true);
-          }}
-          onPause={() => onPlaybackChange(file.id, false)}
-          onEnded={() => onPlaybackChange(file.id, false)}
-          onTimeUpdate={(event) => onProgress(file.id, event.currentTarget.currentTime, event.currentTarget.duration)}
-        />
-        <button className="play-float" type="button" onClick={play}>播放</button>
-        {isRecent ? <span className="badge">最近</span> : null}
-      </div>
-
-      <div className="meta">
-        <div className="title" title={file.name}>{file.name}</div>
-        <div className="subtle">{file.sizeText} · {file.mtime}</div>
-        <div className="card-actions">
-          <span>{progressLabel(savedProgress) || file.type}</span>
-          <button className="ghost-btn danger-btn" type="button" onClick={() => onDelete(file.id)}>删除</button>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function TaskItem({ task, onDelete, onStopSeed }) {
-  const isBad = task.state === 'failed';
-  const isSeed = task.state === 'seeding';
-
-  return (
-    <div className={isBad ? 'task task-bad' : isSeed ? 'task task-seed' : 'task'}>
-      <div className="task-head">
-        <b className="task-title" title={task.name}>{task.name}</b>
-        <div className="task-head-actions">
-          {isSeed && (
-            <button className="ghost-btn seed-stop-btn" type="button" onClick={() => onStopSeed(task.id)}>停止做种</button>
-          )}
-          <button className="ghost-btn" type="button" onClick={() => onDelete(task.id)}>移除</button>
-        </div>
-      </div>
-      <div className="task-line">
-        {taskStateText(task.state)} · {isSeed ? task.downloadedText : `${task.downloadedText} / ${task.lengthText}`}
-      </div>
-      {isSeed ? (
-        <>
-          <div className="task-line">上传 {task.uploadSpeedText} · {task.peers} 连接</div>
-          <div className="task-line">已上传 {task.seedUploadedText} · 做种 {task.seedTimeText} · 分享率 {task.ratioText}</div>
-        </>
-      ) : (
-        <div className="task-line">{task.downloadSpeedText} · {task.peers} 连接</div>
-      )}
-      {task.error ? <div className="bad">{task.error}</div> : null}
-      <div className="bar">
-        <div className="fill" style={{ width: percent(task.progress) }} />
-      </div>
-    </div>
-  );
-}
+const FAST_INTERVAL = 2000;
+const NORMAL_INTERVAL = 5000;
+const IDLE_INTERVAL = 12000;
+const HIDDEN_INTERVAL = 30000;
+const ERROR_BACKOFF_BASE = 1000;
+const MAX_ERROR_BACKOFF = 15000;
 
 export default function App() {
   const [accessKey, setAccessKey] = useState(() => readLocal(KEY_STORAGE, ''));
   const [magnet, setMagnet] = useState('');
-  const [message, setMessage] = useState({ text: '', bad: false });
   const [status, setStatus] = useState(null);
   const [files, setFiles] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -225,11 +36,18 @@ export default function App() {
   const [sortMode, setSortMode] = useState('latest');
   const [recentIds, setRecentIds] = useState(() => readLocal(RECENT_STORAGE, []));
   const [progressMap, setProgressMap] = useState(() => readLocal(PROGRESS_STORAGE, {}));
+  const [loading, setLoading] = useState(true);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, fileId: null, taskId: null });
+  const [activeSection, setActiveSection] = useState('library');
+  const [message, setMessage] = useState(null);
 
+  const toast = useToast();
   const fileSigRef = useRef('');
   const pendingFilesRef = useRef(null);
   const playingIdsRef = useRef(new Set());
   const progressWriteRef = useRef(0);
+  const prevTaskStatesRef = useRef(new Map());
+  const prevDoneNotifiedRef = useRef(new Set());
 
   useEffect(() => {
     if (accessKey.trim()) writeLocal(KEY_STORAGE, accessKey);
@@ -245,17 +63,10 @@ export default function App() {
     return key ? { 'X-Library-Key': key } : {};
   }, [accessKey]);
 
-  const showMessage = useCallback((text, bad = false) => {
-    setMessage({ text: text || '', bad });
-  }, []);
-
   const applyFiles = useCallback((nextFiles, force = false) => {
     const nextSig = fileSignature(nextFiles);
     if (!force && nextSig === fileSigRef.current) return;
 
-    // 下载完成会让片库列表发生变化。旧版页面每次轮询都 innerHTML 重建，
-    // 正在播放的视频会被销毁；这里把“播放中收到的新片库”先暂存，
-    // 等全部视频暂停/结束后再应用，保证播放不会被任务完成打断。
     if (!force && playingIdsRef.current.size > 0) {
       pendingFilesRef.current = nextFiles;
       return;
@@ -264,6 +75,7 @@ export default function App() {
     fileSigRef.current = nextSig;
     pendingFilesRef.current = null;
     setFiles(nextFiles);
+    setLoading(false);
   }, []);
 
   const flushPendingFiles = useCallback(() => {
@@ -275,19 +87,67 @@ export default function App() {
     setFiles(nextFiles);
   }, []);
 
-  const refreshStatus = useCallback(async (forceFiles = false) => {
-    const data = await requestJson('/api/status');
-    setStatus(data);
-    setTasks(data.torrents || []);
-    applyFiles(data.files || [], forceFiles);
+  const checkTaskTransitions = useCallback((newTasks) => {
+    const newStates = new Map();
+    const completed = [];
+    const failed = [];
 
-    if (!data.downloadEnabled) {
-      showMessage(`下载器不可用：${data.downloadError}`, true);
+    for (const task of newTasks) {
+      newStates.set(task.id, task.state);
+      const prevState = prevTaskStatesRef.current.get(task.id);
+
+      if (prevState && prevState !== 'done' && prevState !== 'seeding' && (task.state === 'done' || task.state === 'seeding')) {
+        if (!prevDoneNotifiedRef.current.has(task.id)) {
+          completed.push(task);
+          prevDoneNotifiedRef.current.add(task.id);
+        }
+      }
+
+      if (prevState && prevState !== 'failed' && task.state === 'failed') {
+        failed.push(task);
+      }
     }
-  }, [applyFiles, showMessage]);
+
+    for (const task of completed) {
+      toast.success(`《${task.name}》下载完成，可以观看了`, { duration: 6000 });
+    }
+    for (const task of failed) {
+      toast.error(`《${task.name || task.id}》下载失败：${task.error || '未知错误'}`);
+    }
+
+    for (const [oldId] of prevTaskStatesRef.current) {
+      if (!newStates.has(oldId) && !['done', 'seeding'].includes(prevTaskStatesRef.current.get(oldId))) {
+        prevDoneNotifiedRef.current.delete(oldId);
+      }
+    }
+
+    prevTaskStatesRef.current = newStates;
+  }, [toast]);
+
+  const refreshStatus = useCallback(async (forceFiles = false) => {
+    try {
+      const data = await requestJson('/api/status');
+      setStatus(data);
+      setTasks(data.torrents || []);
+      checkTaskTransitions(data.torrents || []);
+      applyFiles(data.files || [], forceFiles);
+
+      if (!data.downloadEnabled) {
+        setMessage({ text: `下载器不可用：${data.downloadError}`, bad: true });
+      } else {
+        setMessage(null);
+      }
+      setLoading(false);
+    } catch (error) {
+      setMessage({ text: `连接失败：${error.message}`, bad: true });
+      setLoading(false);
+    }
+  }, [applyFiles, checkTaskTransitions]);
 
   useEffect(() => {
     let alive = true;
+    let timer = null;
+    let errorCount = 0;
 
     async function tick() {
       try {
@@ -295,38 +155,90 @@ export default function App() {
         if (!alive) return;
         setStatus(data);
         setTasks(data.torrents || []);
+        checkTaskTransitions(data.torrents || []);
         applyFiles(data.files || []);
+        errorCount = 0;
+        setLoading(false);
 
         if (!data.downloadEnabled) {
-          showMessage(`下载器不可用：${data.downloadError}`, true);
+          setMessage({ text: `下载器不可用：${data.downloadError}`, bad: true });
+        } else {
+          setMessage(null);
         }
       } catch (error) {
-        if (alive) showMessage(`状态刷新失败：${error.message}`, true);
+        if (!alive) return;
+        errorCount += 1;
+        setMessage({ text: `连接失败：${error.message}`, bad: true });
+        setLoading(false);
       }
     }
 
+    function getInterval() {
+      if (document.hidden) return HIDDEN_INTERVAL;
+      if (errorCount > 0) {
+        return Math.min(ERROR_BACKOFF_BASE * Math.pow(2, errorCount - 1), MAX_ERROR_BACKOFF);
+      }
+      const currentTasks = prevTaskStatesRef.current;
+      let downloading = 0;
+      for (const state of currentTasks.values()) {
+        if (state === 'downloading') downloading += 1;
+      }
+      if (downloading > 0) return FAST_INTERVAL;
+      if (currentTasks.size > 0) return NORMAL_INTERVAL;
+      return IDLE_INTERVAL;
+    }
+
+    function schedule() {
+      const interval = getInterval();
+      timer = setTimeout(async () => {
+        await tick();
+        if (alive) {
+          flushPendingFiles();
+          schedule();
+        }
+      }, interval);
+    }
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        clearTimeout(timer);
+        tick();
+        schedule();
+      }
+    };
+
     tick();
-    const timer = setInterval(() => {
-      tick();
-      flushPendingFiles();
-    }, STATUS_INTERVAL_MS);
+    schedule();
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       alive = false;
-      clearInterval(timer);
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [applyFiles, flushPendingFiles, showMessage]);
+  }, [applyFiles, checkTaskTransitions, flushPendingFiles]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash === 'tasks' || hash === 'library') {
+        setActiveSection(hash);
+      }
+    };
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const addMagnet = useCallback(async () => {
     const value = magnet.trim();
     if (!value) {
-      showMessage('请粘贴磁力链接', true);
+      toast.error('请粘贴磁力链接');
       return;
     }
 
     try {
-      showMessage('正在创建任务...');
-      await requestJson('/api/downloads', {
+      const data = await requestJson('/api/downloads', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -335,24 +247,53 @@ export default function App() {
         body: JSON.stringify({ magnet: value }),
       });
       setMagnet('');
-      showMessage('任务已创建');
+      const torrentState = data?.torrent?.state;
+      if (torrentState === 'queued') {
+        toast.success('任务已加入队列');
+      } else if (torrentState === 'downloading') {
+        toast.success('任务已添加，开始下载');
+      } else {
+        toast.success('任务已添加');
+      }
       await refreshStatus();
     } catch (error) {
-      showMessage(error.message || '创建失败', true);
+      toast.error(error.message || '添加失败');
     }
-  }, [authHeaders, magnet, refreshStatus, showMessage]);
+  }, [authHeaders, magnet, refreshStatus, toast]);
 
-  const deleteTask = useCallback(async (id) => {
+  const retryTask = useCallback(async (id) => {
+    try {
+      await requestJson(`/api/downloads/${encodeURIComponent(id)}/retry`, {
+        method: 'POST',
+        headers: authHeaders,
+      });
+      toast.success('已重新开始下载');
+      await refreshStatus();
+    } catch (error) {
+      toast.error(error.message || '重试失败');
+    }
+  }, [authHeaders, refreshStatus, toast]);
+
+  const confirmDeleteTask = useCallback((id) => {
+    setConfirmDialog({ isOpen: true, fileId: null, taskId: id });
+  }, []);
+
+  const deleteTask = useCallback(async () => {
+    const id = confirmDialog.taskId;
+    setConfirmDialog({ isOpen: false, fileId: null, taskId: null });
+    if (!id) return;
     try {
       await requestJson(`/api/downloads/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: authHeaders,
       });
+      prevDoneNotifiedRef.current.delete(id);
+      toast.success('任务已移除');
       await refreshStatus();
     } catch (error) {
-      showMessage(error.message || '移除失败', true);
+      toast.error(error.message || '移除失败');
     }
-  }, [authHeaders, refreshStatus, showMessage]);
+  }, [authHeaders, confirmDialog.taskId, refreshStatus, toast]);
 
   const stopSeeding = useCallback(async (id) => {
     try {
@@ -360,26 +301,37 @@ export default function App() {
         method: 'POST',
         headers: authHeaders,
       });
-      showMessage('已停止做种');
+      toast.success('已停止做种');
       await refreshStatus();
     } catch (error) {
-      showMessage(error.message || '停止做种失败', true);
+      toast.error(error.message || '停止做种失败');
     }
-  }, [authHeaders, refreshStatus, showMessage]);
+  }, [authHeaders, refreshStatus, toast]);
 
-  const deleteFile = useCallback(async (id) => {
-    if (!window.confirm('确认删除这个影片文件？')) return;
+  const confirmDeleteFile = useCallback((id) => {
+    setConfirmDialog({ isOpen: true, fileId: id, taskId: null });
+  }, []);
+
+  const closeConfirmDialog = useCallback(() => {
+    setConfirmDialog({ isOpen: false, fileId: null, taskId: null });
+  }, []);
+
+  const deleteFile = useCallback(async () => {
+    const id = confirmDialog.fileId;
+    setConfirmDialog({ isOpen: false, fileId: null, taskId: null });
+    if (!id) return;
 
     try {
       await requestJson(`/api/files/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: authHeaders,
       });
+      toast.success('文件已删除');
       await refreshStatus(true);
     } catch (error) {
-      showMessage(error.message || '删除失败', true);
+      toast.error(error.message || '删除失败');
     }
-  }, [authHeaders, refreshStatus, showMessage]);
+  }, [authHeaders, confirmDialog.fileId, refreshStatus, toast]);
 
   const handlePlaybackChange = useCallback((id, playing) => {
     if (playing) {
@@ -417,7 +369,12 @@ export default function App() {
     setProgressMap({});
     writeLocal(RECENT_STORAGE, []);
     writeLocal(PROGRESS_STORAGE, {});
-  }, []);
+    toast.info('记录已清空');
+  }, [toast]);
+
+  const handlePlaybackError = useCallback((text) => {
+    toast.error(text);
+  }, [toast]);
 
   const visibleFiles = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -439,65 +396,29 @@ export default function App() {
 
   return (
     <main className="page">
-      <header className="topbar">
-        <a className="brand" href="#library" aria-label="Moonroom">
-          <span className="brand-mark">M</span>
-          <span>
-            <strong>Moonroom</strong>
-            <small>Private Cinema</small>
-          </span>
-        </a>
-        <nav className="nav">
-          <a href="#library">片库</a>
-          <a href="#tasks">任务</a>
-        </nav>
-        <div className="visitor-pill">本周 {visitors.weeklyVisitors ?? '—'}</div>
-      </header>
+      <TopBar visitorCount={visitors.weeklyVisitors} activeSection={activeSection} />
 
-      <section className="hero-panel">
-        <div className="hero-copy">
-          <p>Moonroom</p>
-          <h1>月光放映室</h1>
-        </div>
+      <HeroPanel
+        magnet={magnet}
+        onMagnetChange={setMagnet}
+        onAddMagnet={addMagnet}
+        accessKey={accessKey}
+        onAccessKeyChange={setAccessKey}
+        message={message}
+        downloadAuthRequired={!!status?.downloadAuthRequired}
+      />
 
-        <div className="command-panel">
-          <div className="magnet-row">
-            <input
-              className="input magnet-input"
-              value={magnet}
-              onChange={(event) => setMagnet(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') addMagnet();
-              }}
-              placeholder="magnet:?xt=urn:btih:..."
-            />
-            <button className="primary-btn" type="button" onClick={addMagnet}>开始下载</button>
-          </div>
-          <div className="key-row">
-            <input
-              className="input"
-              type="password"
-              value={accessKey}
-              onChange={(event) => setAccessKey(event.target.value)}
-              placeholder="访问密钥"
-            />
-            <div className={message.bad ? 'message bad' : 'message'}>{message.text || '状态就绪'}</div>
-          </div>
-        </div>
-      </section>
-
-      <section className="stats">
-        <Stat label="影片" value={summary.fileCount ?? files.length} detail={space.libraryText || '—'} />
-        <Stat label="任务" value={`${activeTasks} / ${queuedTasks}`} detail={`${seedingTasks} 做种 · ${failedTasks} 失败`} />
-        <Stat label="下载" value={totalSpeed} />
-        <Stat label="上传" value={totalUpload} detail={`${status?.trackers ?? '—'} tracker`} />
-        <div className="stat">
-          <span>空间</span>
-          <b>{space.availableText || '—'}</b>
-          <em>{space.usedText || '—'} / {space.totalText || '—'}</em>
-          <div className="bar"><div className="fill" style={{ width: percent(space.usedPct) }} /></div>
-        </div>
-      </section>
+      <StatsGrid
+        summary={summary}
+        space={space}
+        trackers={status?.trackers}
+        totalSpeed={totalSpeed}
+        totalUpload={totalUpload}
+        activeTasks={activeTasks}
+        queuedTasks={queuedTasks}
+        seedingTasks={seedingTasks}
+        failedTasks={failedTasks}
+      />
 
       <section className="app-layout">
         <section className="library" id="library">
@@ -507,36 +428,33 @@ export default function App() {
               <h2>片库</h2>
             </div>
             <div className="tools">
-              <input
-                className="input search-input"
+              <Input
+                className="search-input"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索片名"
+                aria-label="搜索影片"
               />
-              <select className="select" value={sortMode} onChange={(event) => setSortMode(event.target.value)}>
+              <Select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="排序方式">
                 <option value="latest">最新</option>
                 <option value="recent">最近播放</option>
                 <option value="name">名称</option>
                 <option value="size">大小</option>
-              </select>
+              </Select>
             </div>
           </div>
 
-          <div className="grid">
-            {visibleFiles.length ? visibleFiles.map((file) => (
-              <VideoCard
-                key={file.id}
-                file={file}
-                savedProgress={progressMap[file.id]}
-                isRecent={recentIds.includes(file.id)}
-                onDelete={deleteFile}
-                onPlayed={handlePlayed}
-                onPlaybackChange={handlePlaybackChange}
-                onPlaybackError={(text) => showMessage(text, true)}
-                onProgress={handleProgress}
-              />
-            )) : <Empty>暂无影片。</Empty>}
-          </div>
+          <VideoGrid
+            files={visibleFiles}
+            loading={loading}
+            progressMap={progressMap}
+            recentIds={recentIds}
+            onDelete={confirmDeleteFile}
+            onPlayed={handlePlayed}
+            onPlaybackChange={handlePlaybackChange}
+            onPlaybackError={handlePlaybackError}
+            onProgress={handleProgress}
+          />
         </section>
 
         <aside className="side-rail" id="tasks">
@@ -545,28 +463,27 @@ export default function App() {
               <h2>任务</h2>
               <span>{tasks.length}</span>
             </div>
-            {tasks.length ? tasks.map((task) => (
-              <TaskItem key={task.id} task={task} onDelete={deleteTask} onStopSeed={stopSeeding} />
-            )) : <Empty>暂无任务。</Empty>}
+            <TaskList tasks={tasks} onDelete={confirmDeleteTask} onStopSeed={stopSeeding} onRetry={retryTask} />
           </section>
 
-          <section className="rail-section">
-            <div className="rail-head">
-              <h2>记录</h2>
-              <button className="ghost-btn" type="button" onClick={clearLocalHistory}>清空</button>
-            </div>
-            {recentIds.length ? recentIds.slice(0, 5).map((id) => {
-              const file = files.find((item) => item.id === id);
-              return (
-                <div className="recent-item" key={id}>
-                  <span>{file?.name || id.slice(0, 10)}</span>
-                  <b>{progressLabel(progressMap[id]) || '—'}</b>
-                </div>
-              );
-            }) : <Empty>暂无记录。</Empty>}
-          </section>
+          <RecentList
+            recentIds={recentIds}
+            files={files}
+            progressMap={progressMap}
+            onClear={clearLocalHistory}
+          />
         </aside>
       </section>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.taskId ? '取消任务' : '删除影片'}
+        message={confirmDialog.taskId ? '确认取消这个任务？取消任务不会删除已下载分片。' : '确认删除这个影片文件？此操作不可撤销。'}
+        confirmText={confirmDialog.taskId ? '取消任务' : '删除'}
+        cancelText="取消"
+        onConfirm={confirmDialog.taskId ? deleteTask : deleteFile}
+        onCancel={closeConfirmDialog}
+      />
     </main>
   );
 }
