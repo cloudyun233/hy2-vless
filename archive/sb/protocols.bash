@@ -77,69 +77,12 @@ add_inbound(){
     restart_singbox
 }
 
-# 为 VLESS Reality 选择端口：可复用当前已有入站端口，或使用默认/自定义端口
-# VLESS 基于 TCP，可与 UDP 协议（Hysteria2/TUIC）复用同一端口
-select_vless_port(){
-    local default_port=443
-
-    # 收集已配置入站的端口（去重，保持出现顺序）
-    local existing_ports=()
-    if [[ -f "$SINGBOX_CONF_PATH" ]]; then
-        while IFS= read -r p; do
-            [[ -n "$p" ]] && existing_ports+=("$p")
-        done < <(jq -r '.inbounds[]?.listen_port // empty' "$SINGBOX_CONF_PATH" 2>/dev/null | awk '!seen[$0]++')
-    fi
-
-    # 没有已存在入站，直接返回默认端口
-    if [[ ${#existing_ports[@]} -eq 0 ]]; then
-        echo "$default_port"
-        return
-    fi
-
-    echo "=================================="
-    echo "  VLESS Reality 端口选择 (TCP)"
-    echo "=================================="
-    echo "检测到当前已使用的端口："
-    local i=1
-    for p in "${existing_ports[@]}"; do
-        local protos
-        protos=$(jq -r --argjson p "$p" '[.inbounds[]? | select(.listen_port==$p) | .type] | join(", ")' "$SINGBOX_CONF_PATH" 2>/dev/null)
-        echo "  $i) 复用端口 $p (已用于: ${protos:-未知})"
-        i=$((i+1))
-    done
-    local default_idx=$i
-    local custom_idx=$((i+1))
-    echo "  $default_idx) 使用默认端口 $default_port"
-    echo "  $custom_idx) 自定义端口"
-    read -rp "选择 [1]: " choice
-
-    if [[ -z "$choice" || "$choice" == "1" ]]; then
-        echo "${existing_ports[0]}"
-    elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#existing_ports[@]}" ]]; then
-        echo "${existing_ports[$((choice-1))]}"
-    elif [[ "$choice" == "$default_idx" ]]; then
-        echo "$default_port"
-    elif [[ "$choice" == "$custom_idx" ]]; then
-        read -rp "请输入自定义端口: " custom
-        if [[ -z "$custom" ]]; then
-            echo "$default_port"
-        elif [[ "$custom" =~ ^[0-9]+$ && "$custom" -ge 1 && "$custom" -le 65535 ]]; then
-            echo "$custom"
-        else
-            warn "端口非法，使用默认端口 $default_port"
-            echo "$default_port"
-        fi
-    else
-        warn "无效选择，使用默认端口 $default_port"
-        echo "$default_port"
-    fi
-}
-
 # 配置 VLESS Reality 协议
 config_vless(){
     info "正在配置 VLESS Reality..."
-    local port
-    port=$(select_vless_port)
+    local default_port=$(get_preferred_port "vless")
+    read -rp "请输入监听端口 [默认: $default_port]: " port
+    port=${port:-$default_port}
     info "使用端口: $port"
 
     open_port "$port" "tcp"

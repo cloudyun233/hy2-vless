@@ -22,9 +22,15 @@ open_port(){
 
 # 智能选择端口：优先使用 443，若被其他协议占用则回退到 8443
 get_preferred_port(){
-    local protocol="$1" # 当前仅 hysteria2 使用（TUIC 已禁用）
+    local protocol="$1" # hysteria2 (UDP) 或 vless (TCP)
 
-    # 检查当前配置：443 端口是否已被非 vless（即 hysteria2）协议占用
+    # VLESS 基于 TCP，可与 UDP 协议(hysteria2)复用 443，默认直接用 443
+    if [[ "$protocol" == "vless" ]]; then
+        echo "443"
+        return
+    fi
+
+    # UDP 协议(hysteria2)：检查 443 是否已被其他非 vless(即 UDP)协议占用
     local current_port_443_proto
     current_port_443_proto=$(jq -r '.inbounds[]? | select(.listen_port==443) | select(.type != "vless") | .type' "$SINGBOX_CONF_PATH" 2>/dev/null || true)
 
