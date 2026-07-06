@@ -6,7 +6,7 @@ show_menu(){
     echo "1. 安装/更新 Sing-box"
     echo "2. 配置 VLESS Reality (Vision)"
     echo "3. 配置 Hysteria2"
-    echo "4. 配置 TUIC v5"
+    # echo "4. 配置 TUIC v5"  # [已禁用] TUIC 功能已注释掉
     echo "5. 配置防火墙转发(只支持nftable)"
     echo "6. 清除入栈配置"
     echo "7. 卸载 Sing-box"
@@ -20,7 +20,7 @@ show_menu(){
         1) install_dependencies; install_singbox ;;
         2) config_vless ;;
         3) config_hy2 ;;
-        4) config_tuic ;;
+        # 4) config_tuic ;;  # [已禁用] TUIC 功能已注释掉
         5) config_port_hopping ;;
         6) clear_config ;;
         7) uninstall_singbox ;;

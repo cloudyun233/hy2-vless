@@ -48,3 +48,37 @@ get_random_uuid(){ uuidgen || cat /proc/sys/kernel/random/uuid; }
 
 # 生成随机密码
 get_random_password(){ openssl rand -base64 18; }
+
+# 从 domains.txt 随机选取一个伪装域名
+# 本地 sb/domains.txt 优先；不存在则尝试从远程拉取到模块临时目录
+# 拉取失败或文件为空时回退到 DEFAULT_DOMAIN（用户无感知）
+get_random_domain(){
+    local local_path="${SB_SCRIPT_DIR:-.}/sb/domains.txt"
+    local remote_url="${SB_MODULE_BASE_URL:-https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs/heads/main/archive/sb}/domains.txt"
+    local domains_file=""
+
+    if [[ -f "$local_path" ]]; then
+        domains_file="$local_path"
+    else
+        if [[ -z "${SB_MODULE_TMP_DIR:-}" ]]; then
+            SB_MODULE_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sb-modules.XXXXXX")"
+        fi
+        domains_file="$SB_MODULE_TMP_DIR/domains.txt"
+        if ! sb_fetch_module "$remote_url" "$domains_file" 2>/dev/null; then
+            echo "$DEFAULT_DOMAIN"
+            return
+        fi
+    fi
+
+    # 随机选取一个非空、非注释行（bash $RANDOM 分布优于 awk rand()）
+    local domains=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && domains+=("$line")
+    done < <(grep -vE '^[[:space:]]*(#|$)' "$domains_file" 2>/dev/null)
+
+    if [[ ${#domains[@]} -eq 0 ]]; then
+        echo "$DEFAULT_DOMAIN"
+    else
+        echo "${domains[$((RANDOM % ${#domains[@]}))]}"
+    fi
+}

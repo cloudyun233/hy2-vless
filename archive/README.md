@@ -18,7 +18,7 @@
 
 本项目包含两个脚本，用于在Linux服务器上快速部署代理服务：
 1. **official.bash** - Xray (VLESS+XTLS+REALITY) 和 Hysteria2 一键安装/卸载脚本
-2. **sb.bash** - Sing-box 一键配置脚本，支持 VLESS Reality、Hysteria2、TUIC v5 协议
+2. **sb.bash** - Sing-box 一键配置脚本，支持 VLESS Reality、Hysteria2 协议（TUIC v5 已注释禁用）
 
 ## 系统要求
 
@@ -27,7 +27,7 @@
 
 ## 快速开始
 
-> **推荐：优先使用 Sing-box**，功能更丰富，支持 VLESS Reality、Hysteria2、TUIC v5 多种协议
+> **推荐：优先使用 Sing-box**，功能更丰富，支持 VLESS Reality、Hysteria2 协议（TUIC 已禁用）
 
 ### 1. Sing-box（推荐）
 
@@ -39,7 +39,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs
 - 1) 安装/更新 Sing-box
 - 2) 配置 VLESS Reality
 - 3) 配置 Hysteria2
-- 4) 配置 TUIC v5
+- ~~4) 配置 TUIC v5~~（已禁用）
 - 5) 配置端口跳跃
 - 6) 清除入栈配置
 
@@ -77,7 +77,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs
 
 - **配置文件**: `/usr/local/etc/sing-box/config.json`
 - **安装目录**: `/usr/local/etc/sing-box/`
-- **支持协议**: VLESS Reality, Hysteria2, TUIC v5
+- **支持协议**: VLESS Reality, Hysteria2（TUIC v5 已禁用）
 
 > **注意**：`sb.bash` 与 `hy2_fakeweb.sh` 各自下载 sing-box 到不同路径（前者 `/usr/local/bin/sing-box`，后者 `${FILE_PATH}/sing-box`），建议二选一使用，避免重复占用磁盘。
 

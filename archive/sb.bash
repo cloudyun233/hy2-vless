@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Sing-box 一键配置脚本
-# 功能：安装和配置 Sing-box 代理服务，支持 VLESS Reality、Hysteria2、TUIC v5 协议
+# 功能：安装和配置 Sing-box 代理服务，支持 VLESS Reality、Hysteria2 协议（TUIC v5 已禁用）
 # 依赖：curl, wget, jq, nftables, openssl, tar, cron
 # 支持：Debian/Ubuntu, CentOS, Alpine Linux
 #

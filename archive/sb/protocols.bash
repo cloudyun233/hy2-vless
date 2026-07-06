@@ -12,6 +12,7 @@ cleanup_cert_files(){
 
 # 生成 TLS 配置（支持自签名证书和 ACME）
 generate_tls_config(){
+    local cn_domain="${1:-$DEFAULT_DOMAIN}"  # 自签证书 CN（ACME 模式忽略，使用用户输入域名）
     echo "证书模式:" >&2
     echo "1. 自签名(需要允许不安全)" >&2
     echo "2. ACME (需要域名)" >&2
@@ -38,7 +39,7 @@ generate_tls_config(){
 
         cleanup_cert_files
 
-        openssl req -x509 -newkey rsa:2048 -nodes -sha256 -keyout "$key_path" -out "$cert_path" -days 3650 -subj "/CN=$DEFAULT_DOMAIN" || true
+        openssl req -x509 -newkey rsa:2048 -nodes -sha256 -keyout "$key_path" -out "$cert_path" -days 3650 -subj "/CN=$cn_domain" || true
         jq -n --arg cert "$cert_path" --arg key "$key_path" '
             {
                 enabled: true,
@@ -76,14 +77,75 @@ add_inbound(){
     restart_singbox
 }
 
+# 为 VLESS Reality 选择端口：可复用当前已有入站端口，或使用默认/自定义端口
+# VLESS 基于 TCP，可与 UDP 协议（Hysteria2/TUIC）复用同一端口
+select_vless_port(){
+    local default_port=443
+
+    # 收集已配置入站的端口（去重，保持出现顺序）
+    local existing_ports=()
+    if [[ -f "$SINGBOX_CONF_PATH" ]]; then
+        while IFS= read -r p; do
+            [[ -n "$p" ]] && existing_ports+=("$p")
+        done < <(jq -r '.inbounds[]?.listen_port // empty' "$SINGBOX_CONF_PATH" 2>/dev/null | awk '!seen[$0]++')
+    fi
+
+    # 没有已存在入站，直接返回默认端口
+    if [[ ${#existing_ports[@]} -eq 0 ]]; then
+        echo "$default_port"
+        return
+    fi
+
+    echo "=================================="
+    echo "  VLESS Reality 端口选择 (TCP)"
+    echo "=================================="
+    echo "检测到当前已使用的端口："
+    local i=1
+    for p in "${existing_ports[@]}"; do
+        local protos
+        protos=$(jq -r --argjson p "$p" '[.inbounds[]? | select(.listen_port==$p) | .type] | join(", ")' "$SINGBOX_CONF_PATH" 2>/dev/null)
+        echo "  $i) 复用端口 $p (已用于: ${protos:-未知})"
+        i=$((i+1))
+    done
+    local default_idx=$i
+    local custom_idx=$((i+1))
+    echo "  $default_idx) 使用默认端口 $default_port"
+    echo "  $custom_idx) 自定义端口"
+    read -rp "选择 [1]: " choice
+
+    if [[ -z "$choice" || "$choice" == "1" ]]; then
+        echo "${existing_ports[0]}"
+    elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#existing_ports[@]}" ]]; then
+        echo "${existing_ports[$((choice-1))]}"
+    elif [[ "$choice" == "$default_idx" ]]; then
+        echo "$default_port"
+    elif [[ "$choice" == "$custom_idx" ]]; then
+        read -rp "请输入自定义端口: " custom
+        if [[ -z "$custom" ]]; then
+            echo "$default_port"
+        elif [[ "$custom" =~ ^[0-9]+$ && "$custom" -ge 1 && "$custom" -le 65535 ]]; then
+            echo "$custom"
+        else
+            warn "端口非法，使用默认端口 $default_port"
+            echo "$default_port"
+        fi
+    else
+        warn "无效选择，使用默认端口 $default_port"
+        echo "$default_port"
+    fi
+}
+
 # 配置 VLESS Reality 协议
 config_vless(){
     info "正在配置 VLESS Reality..."
-    local port=443
+    local port
+    port=$(select_vless_port)
+    info "使用端口: $port"
 
     open_port "$port" "tcp"
 
-    local dest_domain="$DEFAULT_DOMAIN"
+    local dest_domain
+    dest_domain=$(get_random_domain)
     local uuid=$(get_random_uuid)
     local short_id=$(openssl rand -hex 4)
     local keys=$("$SINGBOX_BIN" generate reality-keypair)
@@ -138,8 +200,10 @@ config_hy2(){
     open_port "$port" "udp"
 
     local password=$(get_random_password)
+    local dest_domain
+    dest_domain=$(get_random_domain)
 
-    local tls_config=$(generate_tls_config)
+    local tls_config=$(generate_tls_config "$dest_domain")
 
     # 询问是否启用 obfs
     local obfs_config='{}'
@@ -154,7 +218,7 @@ config_hy2(){
         ')
     fi
 
-    local inbound=$(jq -n --arg port "$port" --arg pass "$password" --argjson tls "$tls_config" --argjson obfs "$obfs_config" --arg domain "$DEFAULT_DOMAIN" '
+    local inbound=$(jq -n --arg port "$port" --arg pass "$password" --argjson tls "$tls_config" --argjson obfs "$obfs_config" --arg domain "$dest_domain" '
         {
             type: "hysteria2",
             tag: "hysteria2-in",
@@ -178,49 +242,51 @@ config_hy2(){
     info "Hysteria2 已配置完成。"
     echo "密码: $password"
     echo "端口: $port"
+    echo "伪装域名: $dest_domain"
     if [[ "$obfs_config" != "{}" ]]; then
         echo "Obfs 密码: $(echo "$obfs_config" | jq -r '.password')"
     fi
 }
 
 # 配置 TUIC v5 协议
-config_tuic(){
-    info "正在配置 TUIC v5..."
-    local default_port=$(get_preferred_port "tuic")
-    read -rp "请输入监听端口 [默认: $default_port]: " port
-    port=${port:-$default_port}
-    info "使用端口: $port"
-
-    open_port "$port" "udp"
-
-    local uuid=$(get_random_uuid)
-    local password=$(get_random_password)
-
-    local tls_config=$(generate_tls_config)
-
-    local inbound=$(jq -n --arg port "$port" --arg uuid "$uuid" --arg pass "$password" --argjson tls "$tls_config" '
-        {
-            type: "tuic",
-            tag: "tuic-in",
-            listen: "::",
-            listen_port: ($port|tonumber),
-            users: [
-                {
-                    name: "cloudyun",
-                    uuid: $uuid,
-                    password: $pass
-                }
-            ],
-            congestion_control: "bbr",
-            auth_timeout: "3s",
-            zero_rtt_handshake: true,
-            tls: $tls
-        }
-    ')
-
-    add_inbound "$inbound"
-    info "TUIC v5 已配置完成。"
-    echo "UUID: $uuid"
-    echo "密码: $password"
-    echo "端口: $port"
-}
+# [已禁用] TUIC 配置功能已注释掉，如需恢复请取消以下注释
+# config_tuic(){
+#     info "正在配置 TUIC v5..."
+#     local default_port=$(get_preferred_port "tuic")
+#     read -rp "请输入监听端口 [默认: $default_port]: " port
+#     port=${port:-$default_port}
+#     info "使用端口: $port"
+#
+#     open_port "$port" "udp"
+#
+#     local uuid=$(get_random_uuid)
+#     local password=$(get_random_password)
+#
+#     local tls_config=$(generate_tls_config)
+#
+#     local inbound=$(jq -n --arg port "$port" --arg uuid "$uuid" --arg pass "$password" --argjson tls "$tls_config" '
+#         {
+#             type: "tuic",
+#             tag: "tuic-in",
+#             listen: "::",
+#             listen_port: ($port|tonumber),
+#             users: [
+#                 {
+#                     name: "cloudyun",
+#                     uuid: $uuid,
+#                     password: $pass
+#                 }
+#             ],
+#             congestion_control: "bbr",
+#             auth_timeout: "3s",
+#             zero_rtt_handshake: true,
+#             tls: $tls
+#         }
+#     ')
+#
+#     add_inbound "$inbound"
+#     info "TUIC v5 已配置完成。"
+#     echo "UUID: $uuid"
+#     echo "密码: $password"
+#     echo "端口: $port"
+# }

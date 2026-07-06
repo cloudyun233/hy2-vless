@@ -4,8 +4,9 @@ open_port(){
     local proto="$2"
 
     if command -v nft >/dev/null; then
-        nfthandel=$(nft list table inet singbox_filter 2>/dev/null)
-        if [[ -z "$nfthandel" ]]; then
+        local nfthandle
+        nfthandle=$(nft list table inet singbox_filter 2>/dev/null)
+        if [[ -z "$nfthandle" ]]; then
             nft add table inet singbox_filter || true
             nft add chain inet singbox_filter input { type filter hook input priority 0 \; policy accept \; } || true
         fi
@@ -21,16 +22,11 @@ open_port(){
 
 # 智能选择端口：优先使用 443，若被其他协议占用则回退到 8443
 get_preferred_port(){
-    local protocol="$1" # "hysteria2" or "tuic"
-    local other_protocol=""
-    if [[ "$protocol" == "hysteria2" ]]; then
-        other_protocol="tuic"
-    else
-        other_protocol="hysteria2"
-    fi
+    local protocol="$1" # 当前仅 hysteria2 使用（TUIC 已禁用）
 
-    # 检查当前配置
-    local current_port_443_proto=$(jq -r '.inbounds[] | select(.listen_port==443) | select(.type != "vless") | .type' "$SINGBOX_CONF_PATH" 2>/dev/null || true)
+    # 检查当前配置：443 端口是否已被非 vless（即 hysteria2）协议占用
+    local current_port_443_proto
+    current_port_443_proto=$(jq -r '.inbounds[]? | select(.listen_port==443) | select(.type != "vless") | .type' "$SINGBOX_CONF_PATH" 2>/dev/null || true)
 
     if [[ -z "$current_port_443_proto" ]]; then
         # 443 未被使用，直接占用
@@ -120,7 +116,7 @@ config_port_hopping(){
     info "正在配置防火墙转发 (端口跳跃)..."
 
     local default_dest="443"
-    read -rp "请输入目标端口 (即 Hy2/TUIC 实际监听的端口) [默认: $default_dest]: " dest_port
+    read -rp "请输入目标端口 (即 Hy2 实际监听的端口) [默认: $default_dest]: " dest_port
     dest_port=${dest_port:-$default_dest}
 
     local default_hops="443,2053,2083,2087,2096,8443"
