@@ -32,7 +32,8 @@
 ### 1. Sing-box（推荐）
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs/heads/main/archive/sb.bash)
+# 主源失败（如 GitHub 429 限流）自动回退 jsdelivr 镜像
+bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs/heads/main/archive/sb.bash || curl -fsSL https://cdn.jsdelivr.net/gh/cloudyun233/jump-endfield@main/archive/sb.bash)
 ```
 
 **功能选项：**
@@ -48,7 +49,8 @@ bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs
 ### 2. official.bash（官方 Xray/Hysteria2）
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs/heads/main/archive/official.bash)
+# 主源失败（如 GitHub 429 限流）自动回退 jsdelivr 镜像
+bash <(curl -fsSL https://raw.githubusercontent.com/cloudyun233/jump-endfield/refs/heads/main/archive/official.bash || curl -fsSL https://cdn.jsdelivr.net/gh/cloudyun233/jump-endfield@main/archive/official.bash)
 ```
 
 **功能选项：**

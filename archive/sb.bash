@@ -21,14 +21,24 @@ sb_cleanup_modules(){
 }
 trap sb_cleanup_modules EXIT
 
+# 将 raw.githubusercontent.com 链接转为 jsdelivr 镜像（用于 429 限流回退）
+sb_github_mirror_url(){
+    local url="$1"
+    if [[ "$url" =~ ^https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/refs/heads/([^/]+)/(.*)$ ]]; then
+        echo "https://cdn.jsdelivr.net/gh/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}@${BASH_REMATCH[3]}/${BASH_REMATCH[4]}"
+    fi
+}
+
 sb_fetch_module(){
     local url="$1"
     local out="$2"
+    local mirror
+    mirror=$(sb_github_mirror_url "$url")
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$out"
+        curl -fsSL "$url" -o "$out" || { [[ -n "$mirror" ]] && curl -fsSL "$mirror" -o "$out"; }
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$out" "$url"
+        wget -qO "$out" "$url" || { [[ -n "$mirror" ]] && wget -qO "$out" "$mirror"; }
     else
         echo "[错误] 未找到 curl 或 wget，无法加载 Sing-box 模块：$url" >&2
         return 1

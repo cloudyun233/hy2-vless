@@ -41,12 +41,18 @@ clear_config(){
 run_test_script(){ bash <(curl -Ls Check.Place); }
 
 # 安装 BBRv3 内核优化
-run_bbr(){ bash <(curl -l -s https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/refs/heads/main/install.sh); }
+run_bbr(){ bash <(curl -fsSL https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/refs/heads/main/install.sh || curl -fsSL https://cdn.jsdelivr.net/gh/byJoey/Actions-bbr-v3@main/install.sh); }
 
 # 运行 IP-Sentinel Agent 客户端脚本
 run_ip_sentinel_agent(){
     info "正在执行 IP-Sentinel Agent 客户端脚本..."
-    bash -c "$(curl -fsSL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/install.sh)"
+    local script
+    script=$(curl -fsSL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/install.sh || curl -fsSL https://cdn.jsdelivr.net/gh/hotyue/IP-Sentinel@main/install.sh)
+    if [[ -z "$script" ]]; then
+        err "拉取 IP-Sentinel 脚本失败（可能被限流），请稍后重试。"
+        return 1
+    fi
+    bash -c "$script"
 }
 
 # 卸载 Sing-box 及相关配置
