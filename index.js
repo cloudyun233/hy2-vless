@@ -2,8 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-import { spawn, spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // 计算 __dirname 的 ES 模块等价写法
@@ -13,11 +12,9 @@ const __dirname = path.dirname(__filename);
 const root = __dirname;
 const fileRoot = process.env.FILE_PATH || path.join(root, '.npm', 'video');
 const runtimeDir = process.env.HTTP_RUNTIME_DIR || path.join(fileRoot, 'http_runtime');
-const downloadDir = process.env.DOWNLOAD_DIR || path.join(fileRoot, 'downloads');
 const serverSource = path.join(root, 'server.mjs');
 const runtimeServer = path.join(runtimeDir, 'server.mjs');
 const runtimeScript = path.join(root, 'hy2_fakeweb.sh');
-const downloadKeyPath = path.join(fileRoot, 'download_key.txt');
 
 const children = new Set();
 let shuttingDown = false;
@@ -28,59 +25,6 @@ function log(message) {
 
 function mkdirp(dir) {
   fs.mkdirSync(dir, { recursive: true });
-}
-
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { stdio: 'inherit', shell: false, ...options });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')} exited with ${result.status}`);
-  }
-}
-
-function ensureWebTorrentRuntime() {
-  if (fs.existsSync(path.join(runtimeDir, 'node_modules', 'webtorrent'))) {
-    log('reuse runtime packages');
-    return;
-  }
-
-  log('install runtime packages (webtorrent)');
-  fs.writeFileSync(
-    path.join(runtimeDir, 'package.json'),
-    JSON.stringify({
-      type: 'module',
-      private: true,
-      dependencies: {
-        webtorrent: 'latest',
-      },
-    }, null, 2),
-  );
-  try {
-    run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--omit=dev'], { cwd: runtimeDir });
-  } catch (error) {
-    log(`WebTorrent 运行时安装失败。请检查网络连接，或离线部署时手动执行：cd "${runtimeDir}" && npm install webtorrent`);
-    throw error;
-  }
-}
-
-function ensureDownloadKey() {
-  if (process.env.DOWNLOAD_KEY) {
-    log(`use DOWNLOAD_KEY from environment: ${process.env.DOWNLOAD_KEY}`);
-    return process.env.DOWNLOAD_KEY;
-  }
-
-  if (fs.existsSync(downloadKeyPath)) {
-    const key = fs.readFileSync(downloadKeyPath, 'utf8').trim();
-    if (key) {
-      log(`reuse Web operation key: ${key}`);
-      return key;
-    }
-  }
-
-  const key = crypto.randomUUID();
-  fs.writeFileSync(downloadKeyPath, `${key}\n`, { mode: 0o600 });
-  log(`generate Web operation key: ${key}`);
-  return key;
 }
 
 function copyServer() {
@@ -117,20 +61,15 @@ function shutdown(code = 0) {
 function main() {
   log(`startup root: ${root}`);
   if (!fs.existsSync(serverSource)) throw new Error(`missing server.mjs beside index.js: ${serverSource}`);
-  if (!fs.existsSync(runtimeScript)) throw new Error(`missing hy2_fakeweb.sh beside index.js: ${runtimeScript}`);
+  if (!fs.existsSync(runtimeScript)) throw new Error(`missing hyde runtime script: ${runtimeScript}`);
   mkdirp(fileRoot);
   mkdirp(runtimeDir);
-  mkdirp(downloadDir);
-  ensureWebTorrentRuntime();
-  const downloadKey = ensureDownloadKey();
   copyServer();
 
   const sharedEnv = {
     FILE_PATH: fileRoot,
     HTTP_RUNTIME_DIR: runtimeDir,
-    DOWNLOAD_DIR: downloadDir,
     FRONTEND_DIST_DIR: process.env.FRONTEND_DIST_DIR || path.join(root, 'dist'),
-    DOWNLOAD_KEY: downloadKey,
   };
 
   log(`spawn web server: ${runtimeServer}`);
