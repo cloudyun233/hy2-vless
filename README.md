@@ -1,24 +1,25 @@
-# Moonroom
+# Solar Wanderer · 遨游太阳系
 
-Moonroom 是一个轻量私有影视 WebApp：NodeJS 一键启动 HTTPS Web、React 前端、磁力任务管理、视频在线播放、文件删除和访问密钥。页面默认只加载封面和状态，只有点击播放时才请求视频文件。
+基于真实 NASA JPL 星历的浏览器端 1:1 实时太阳系探索应用（上游项目 [hyqzz/Solar-Wanderer](https://github.com/hyqzz/Solar-Wanderer)，MIT 协议）：NodeJS 一键启动 HTTPS Web，前端为 `wanderer/` 源码 Vite 构建产物（真实纹理贴图、物理大气散射、星空、彗星、小行星带、奥尔特云、程序化环境音效、自由飞行/地表行走/海洋下潜），同时保留磁力下载服务端逻辑。
 
+- 前端源码位于 `wanderer/`，构建产物输出到根目录 `dist/`（纯静态，`base: './'` 支持任意子路径部署）
+- 范围从太阳表面延伸至 10 万 AU 奥尔特云；中英双语（`dist/en/`）
 - 自动生成 ECDSA prime256v1 自签证书（含 CN、SAN、法国上法兰西鲁贝地区字段、keyUsage、extendedKeyUsage）
 - 证书默认有效期 365 天（1 年），提前 30 天自动续期
 - Web 服务自动复用证书启用 HTTPS（证书不存在时降级为 HTTP）
 
-## 部署教程
-
-### 1. 本地构建前端
+## 本地构建前端
 
 ```bash
-cd web
+cd wanderer
 npm install
-npm run build
+npm run build    # 产物输出到根目录 dist/
+npm test         # 47 项星历/物理精度测试（可选，离线）
 ```
 
-构建完成后，仓库根目录会生成 `dist/`。
+## 部署教程
 
-### 2. 上传平铺运行文件
+### 1. 上传平铺运行文件
 
 把下面内容放到 Linux 服务器同一个工作目录，例如 `/home/container`：
 
@@ -95,13 +96,13 @@ Web 操作密钥默认开启。首次启动会自动生成并持久化到 `.npm/
 https://YOUR_SERVER_IP:YOUR_PORT/
 ```
 
-### 6. 更新前端
+英文版：`https://YOUR_SERVER_IP:YOUR_PORT/en/`
 
-修改 `web/` 后重新构建：
+### 6. 更新页面
+
+修改 `wanderer/` 源码后重新构建并上传新的 `dist/` 覆盖服务器上的旧版本：
 
 ```bash
-cd web
+cd wanderer
 npm run build
 ```
-
-然后上传新的 `dist/` 覆盖服务器上的旧版本。

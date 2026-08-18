@@ -1,0 +1,57 @@
+# ---- 依赖 ----
+node_modules/
+.pnp/
+.pnp.js
+
+# ---- 构建产物 ----
+dist/
+dist-ssr/
+*.local
+
+# ---- Vite / 缓存 ----
+.vite/
+.cache/
+*.tsbuildinfo
+
+# ---- 日志 ----
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- 环境变量 / 密钥 ----
+.env
+.env.*
+!.env.example
+
+# ---- 测试 / 覆盖率 ----
+coverage/
+.nyc_output/
+
+# ---- 编辑器 / IDE ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---- 文档与推广素材 ----
+# docs/ 默认不纳入版本库(含超大演示视频等);仅保留 example 演示截图供 README 引用。
+docs/*
+!docs/sdlc/
+docs/sdlc/*
+!docs/sdlc/screenshots/
+docs/sdlc/screenshots/*
+!docs/sdlc/screenshots/example/
+!docs/sdlc/screenshots/example/**
+
